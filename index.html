@@ -414,6 +414,7 @@ tr.new-t{animation:rowhl 4s ease forwards}
       <div class="sticky-bar" id="vacBar">
         <button class="ab ab-vac" onclick="showVacForm()">🏖️ إجازة جديدة</button>
         <span id="vacBal" class="tl" style="font-size:.8rem"></span>
+        <button class="ab ab-emp" onclick="exportCSV('إجازات','الإجازات')" style="font-size:.78rem;padding:7px 14px">📊 تصدير</button>
       </div>
       <div id="vacFormWrap" class="hidden"></div>
       <div id="vacOut"></div>
@@ -793,6 +794,22 @@ function isSup(){return!EMP_MODE&&(CU?.role==='sup'||CU?.role==='admin');}
 function isEmp(){return EMP_MODE||CU?.role==='emp';}
 function canEdit(eid){return isSup()||(CU&&CU.empId===eid);}
 
+// هل يمكن للمستخدم الحالي رؤية/تعديل هذا الموظف؟
+function canViewEmp(e){
+  if(isAdm()) return true;           // المدير يرى الكل
+  if(!isSup()) return e.empId===CU.empId;  // الموظف يرى نفسه فقط
+  return e.shift===CU.shift;         // المشرف يرى وردييته فقط
+}
+// فلترة قائمة بيانات حسب الصلاحية
+async function filterByPerm(data, sheetName){
+  if(isAdm()) return data;
+  if(!isSup()) return data.filter(r=>r.empId===CU.empId);
+  // مشرف: فلترة بموظفي الوردية
+  const shiftEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+  shiftEmps.push(CU.empId); // أضف المشرف نفسه
+  return data.filter(r=>shiftEmps.includes(r.empId)||r.shift===CU.shift);
+}
+
 /* ══ ثيم ══ */
 function toggleTheme(){
   const d=document.documentElement,dk=d.hasAttribute('data-dark');
@@ -1026,18 +1043,86 @@ async function loadAdminDash(){
 }
 
 async function loadSupDash(){
-  const now=new Date(),s=CU.shift;
-  const emps=(await dbAll('موظفون')).filter(e=>e.shift===s);
-  const cards=await dbAll('بطاقات');
-  const exp=cards.filter(c=>emps.find(e=>e.empId===c.empId)).filter(c=>{const d=ddiff(now,c.expiryDate);return d>=0&&d<=60;});
-  const st=shiftSt(s,now);
-  const clsCard={أ:'sca',ب:'scb',ج:'scc',د:'scd'}[s];
+  const now=new Date(), sh=CU.shift;
+  const [allEmps,sups,vacs,ots,cards]=await Promise.all([
+    dbAll('موظفون'),dbAll('مشرفون'),dbAll('إجازات'),dbAll('اضافي'),dbAll('بطاقات')
+  ]);
+  // المشرف يرى وردييته فقط
+  const emps=allEmps.filter(e=>e.shift===sh);
+  const myVacs=vacs.filter(v=>emps.find(e=>e.empId===v.empId));
+  const myOTs=ots.filter(o=>emps.find(e=>e.empId===o.empId));
+  const myCards=cards.filter(c=>emps.find(e=>e.empId===c.empId));
+  const exp=myCards.filter(c=>{const d=ddiff(now,c.expiryDate);return d>=0&&d<=60;});
+  const activeVacs=myVacs.filter(v=>new Date(v.startDate)<=now&&new Date(v.endDate)>=now);
+  const pendOT=myOTs.filter(o=>!o.received);
+  const st=shiftSt(sh,now);
+  const clsCard={أ:'sca',ب:'scb',ج:'scc',د:'scd'}[sh];
+  const mySups=sups.filter(x=>x.shift===sh);
+
   let h=`<div class="grid4">
-    <div class="stat ${clsCard}"><div class="sn">${emps.length}</div><div class="sl">موظفو وردية ${s}</div></div>
-    <div class="stat" style="border-top:3px solid var(--info)"><div class="sn">${st==='صباح'?'☀️':st==='مساء'?'🌙':'😴'}</div><div class="sl">حالة اليوم: ${st}</div></div>
-    <div class="stat" style="border-top:3px solid var(--err)"><div class="sn" style="color:var(--err)">${exp.length}</div><div class="sl">بطاقات تنتهي</div></div>
-  </div>
-  <div class="card"><h3 style="margin-bottom:12px">📅 تقويم ${AR_M[new Date().getMonth()]} ${new Date().getFullYear()}</h3>${calHTML(new Date().getFullYear(),new Date().getMonth())}</div>`;
+    <div class="stat ${clsCard}" style="color:#fff">
+      <div class="si">🎖️</div><div class="sn">${emps.length}</div>
+      <div class="sl">موظفو وردية ${sh}</div>
+    </div>
+    <div class="stat" style="border-top:3px solid var(--b1)">
+      <div class="si">🎖️</div><div class="sn" style="color:var(--b1)">${mySups.length}</div>
+      <div class="sl">مشرفو وردية ${sh}</div>
+    </div>
+    <div class="stat" style="border-top:3px solid var(--info)">
+      <div class="si">${st==='صباح'?'☀️':st==='مساء'?'🌙':'😴'}</div>
+      <div class="sn">${st==='صباح'?'☀️':st==='مساء'?'🌙':'😴'}</div>
+      <div class="sl">حالة اليوم: ${st}</div>
+    </div>
+    <div class="stat" style="border-top:3px solid var(--d1)">
+      <div class="si">🏖️</div><div class="sn" style="color:var(--d1)">${activeVacs.length}</div>
+      <div class="sl">في إجازة الآن</div>
+    </div>
+    <div class="stat" style="border-top:3px solid var(--warn)">
+      <div class="si">⏰</div><div class="sn" style="color:var(--warn)">${pendOT.length}</div>
+      <div class="sl">إضافي لم يُستلم</div>
+    </div>
+    <div class="stat" style="border-top:3px solid var(--err)">
+      <div class="si">💳</div><div class="sn" style="color:var(--err)">${exp.length}</div>
+      <div class="sl">بطاقات تنتهي قريباً</div>
+    </div>
+  </div>`;
+
+  // قائمة موظفي الوردية
+  h+=`<div class="card mb12">
+    <div class="card-hd"><h3>👥 موظفو وردية ${sh} ${shBadge(sh)}</h3>
+      <button class="btn btn-p btn-sm" onclick="go('myshift')">عرض الجدول الكامل</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>الاسم</th><th>الوظيفي</th><th>المنطقة</th><th>المركز</th><th>📅 سنوية</th><th>📋 مجدولة</th><th>حالة اليوم</th></tr></thead>
+      <tbody>${emps.slice(0,10).map(e=>{
+        const annQ=parseInt(e.annualQuota)||30,schQ=parseInt(e.schedQuota)||60;
+        const ev=vacs.filter(v=>v.empId===e.empId);
+        const au=ev.filter(v=>v.vacType==='annual'||v.vacType.includes('سنوية')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
+        const su=ev.filter(v=>v.vacType==='sched'||v.vacType.includes('مجدولة')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
+        const inVac=activeVacs.find(v=>v.empId===e.empId);
+        return`<tr>
+          <td><strong>${e.name}</strong></td><td>${e.empId}</td>
+          <td>${e.region||'-'}</td><td>${e.center||'-'}</td>
+          <td><span class="badge ${annQ-au<=3?'berr':annQ-au<=10?'bwarn':'bok'}">${annQ-au}/${annQ}</span></td>
+          <td><span class="badge ${schQ-su<=5?'berr':schQ-su<=20?'bwarn':'bok'}">${schQ-su}/${schQ}</span></td>
+          <td>${inVac?'<span class="badge bwarn">✈️ إجازة</span>':'<span class="badge bok">✅</span>'}</td>
+        </tr>`;}).join('')}
+      </tbody></table></div>
+    ${emps.length>10?`<p style="color:var(--text-l);font-size:.8rem;margin-top:8px">وآخرون ${emps.length-10}... <button class="btn btn-s btn-sm" onclick="go('myshift')">عرض الكل</button></p>`:''}
+  </div>`;
+
+  if(exp.length){
+    h+=`<div class="card mb12" style="border-right:4px solid var(--err)">
+      <div class="card-hd"><h3>⚠️ بطاقات تنتهي خلال 60 يوم</h3></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>الموظف</th><th>البطاقة</th><th>الانتهاء</th><th>المتبقي</th></tr></thead>
+        <tbody>${exp.map(c=>{const d=ddiff(now,c.expiryDate);return`<tr>
+          <td>${c.name}</td><td>${c.cardType}</td><td>${fmtD(c.expiryDate)}</td>
+          <td class="${d<=30?'exp-r':'exp-w'}">${d} يوم</td></tr>`;}).join('')}
+        </tbody></table></div></div>`;
+  }
+
+  h+=`<div class="card"><h3 style="margin-bottom:12px">📅 تقويم ${AR_M[now.getMonth()]} ${now.getFullYear()}</h3>${calHTML(now.getFullYear(),now.getMonth())}</div>`;
   $('dashOut').innerHTML=h;
 }
 
@@ -1353,14 +1438,65 @@ function miniCal(sh,s,e){
 
 /* ══ تعبئة تلقائية ══ */
 async function autoFill(qId,nId,eidId,mobId,shId){
-  const q=$v(qId).trim();if(q.length<3)return;
-  const all=[...await dbAll('موظفون'),...await dbAll('مشرفون')];
-  const f=all.find(e=>e.empId===q||e.mobile===q||((e.name||'').includes(q)&&q.length>=3));
+  const q=$v(qId).trim();if(q.length<2)return;
+  const allEmps=await dbAll('موظفون');
+  const allSups=await dbAll('مشرفون');
+  let pool=[...allEmps,...allSups];
+  // المشرف يبحث في وردييته فقط
+  if(!isAdm()&&isSup()&&!EMP_MODE){
+    pool=pool.filter(e=>e.shift===CU.shift||e.empId===CU.empId);
+  }
+  const f=pool.find(e=>e.empId===q||e.mobile===q||((e.name||'').includes(q)&&q.length>=2));
   if(!f)return;
   if(nId)$s(nId,f.name||'');
   if(eidId)$s(eidId,f.empId||'');
   if(mobId)$s(mobId,f.mobile||'');
   if(shId)$s(shId,f.shift||'');
+  return f;
+}
+
+// قائمة منسدلة لاختيار موظف (للمشرف)
+async function buildEmpSelect(selectId, defaultEmpId=''){
+  const allEmps=await dbAll('موظفون');
+  let pool=allEmps;
+  if(!isAdm()&&isSup()&&!EMP_MODE){
+    pool=allEmps.filter(e=>e.shift===CU.shift);
+  }
+  const sel=$(selectId); if(!sel)return;
+  sel.innerHTML='<option value="">— اختر موظفاً —</option>'+
+    pool.map(e=>`<option value="${e.empId}" ${e.empId===defaultEmpId?'selected':''}>${e.name} (${e.empId})</option>`).join('');
+}
+
+function fillFromSelect(selectId,nId,eidId,mobId,shId){
+  // kept for compatibility
+}
+
+// اختيار موظف من القائمة المنسدلة
+async function selEmpFill(selId,nId,eidId,mobId,shId,balId){
+  const sel=$(selId); if(!sel)return;
+  // تعبئة فورية من القيمة الحالية
+  const empId=sel.value; if(!empId)return;
+  const all=[...lsGetAll('موظفون'),...lsGetAll('مشرفون')];
+  const f=all.find(e=>e.empId===empId);
+  if(!f)return;
+  if(nId)$s(nId,f.name||'');
+  if(eidId)$s(eidId,f.empId||'');
+  if(mobId)$s(mobId,f.mobile||'');
+  if(shId)$s(shId,f.shift||'');
+  if(balId) loadVacBal(balId,empId);
+  // إعادة حساب التقويم إذا وُجد
+  if(typeof calcVacDur==='function') calcVacDur();
+  // ربط حدث التغيير
+  sel.onchange=function(){
+    const f2=all.find(e=>e.empId===this.value);
+    if(!f2)return;
+    if(nId)$s(nId,f2.name||'');
+    if(eidId)$s(eidId,f2.empId||'');
+    if(mobId)$s(mobId,f2.mobile||'');
+    if(shId)$s(shId,f2.shift||'');
+    if(balId) loadVacBal(balId,f2.empId);
+    if(typeof calcVacDur==='function') calcVacDur();
+  };
 }
 function prefill(nId,eidId,mobId,shId){
   if(!EMP_MODE&&CU.role!=='emp')return;
@@ -1376,6 +1512,10 @@ function prefill(nId,eidId,mobId,shId){
 async function renderEmps(){
   const sh=$v('f_shift'),rg=$v('f_reg'),q=($v('f_q')||'').toLowerCase();
   let [emps,allVacs,allOTs]=await Promise.all([dbAll('موظفون'),dbAll('إجازات'),dbAll('اضافي')]);
+  // المشرف يرى وردييته فقط — المدير يرى الكل
+  if(!isAdm()){
+    emps=emps.filter(e=>e.shift===CU.shift);
+  }
   if(sh) emps=emps.filter(e=>e.shift===sh);
   if(rg) emps=emps.filter(e=>(e.region||'').includes(rg));
   if(q)  emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.empId||'').includes(q)||(e.center||'').toLowerCase().includes(q));
@@ -1443,7 +1583,11 @@ async function saveEmp(id){
   if(!n||!eid||!m){showMsg('ef_m2','err','الحقول المطلوبة *');return;}
   const annQ=parseInt($v('ef_annQ'))||30;
   const schQ=parseInt($v('ef_schQ'))||60;
-  const existing=id?(await dbAll('موظفون')).find(e=>e.id===id):null;
+  const allEmps=await dbAll('موظفون');
+  const existing=id?allEmps.find(e=>e.id===id):null;
+  // منع التكرار بنفس الرقم الوظيفي
+  const duplicate=allEmps.find(e=>e.empId===eid&&e.id!==id);
+  if(duplicate){showMsg('ef_m2','err','⚠️ الرقم الوظيفي '+eid+' مسجّل بالفعل للموظف: '+duplicate.name);return;}
   const old=existing?.shift;
   const row={id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,position:pos,region:reg,center:ctr,annualQuota:annQ,schedQuota:schQ};
   if(old&&old!==sh){row.transferDate=new Date().toISOString().split('T')[0];row.transferFrom=old;}
@@ -1605,7 +1749,12 @@ function showVacForm(v=null){
   const types=[...VAC_TYPES.map(t=>t.lbl),...custom];
   $('vacFormWrap').innerHTML=`<div class="fsec">
     <h4>🏖️ ${v?'تعديل إجازة':'إجازة جديدة'}</h4>
-    ${isSup()&&!EMP_MODE?`<div class="fg"><label>🔍 بحث موظف</label><input id="vf_q" oninput="autoFill('vf_q','vf_n','vf_eid','vf_mob','vf_sh')" placeholder="رقم الوظيفي أو الاسم..."/></div>`:''}
+    ${isSup()&&!EMP_MODE?`
+    <div class="fg"><label>👥 اختر موظفاً</label>
+      <select id="vf_sel" onchange="selEmpFill('vf_sel','vf_n','vf_eid','vf_mob','vf_sh','vf_bal')">
+        <option value="">— اختر —</option>
+      </select>
+    </div>`:''}
     <div class="frow">
       <div class="fg"><label>👤 الاسم</label><input id="vf_n" value="${v?.name||''}" readonly/></div>
       <div class="fg"><label>🔢 الوظيفي</label><input id="vf_eid" value="${v?.empId||''}" readonly/></div>
@@ -1638,8 +1787,14 @@ function showVacForm(v=null){
     </div>
   </div>`;
   $('vacFormWrap').classList.remove('hidden');
-  prefill('vf_n','vf_eid','vf_mob','vf_sh');
-  if(CU) loadVacBal('vf_bal',CU.empId);
+  if(isSup()&&!EMP_MODE){
+    buildEmpSelect('vf_sel', v?.empId||'').then(()=>{
+      if(v?.empId) selEmpFill('vf_sel','vf_n','vf_eid','vf_mob','vf_sh','vf_bal');
+    });
+  } else {
+    prefill('vf_n','vf_eid','vf_mob','vf_sh');
+    if(CU) loadVacBal('vf_bal',CU.empId);
+  }
   if(v?.startDate) calcVacDur();
 }
 function onVacTypeChg(){$('vf_nw').classList.toggle('hidden',$v('vf_type')!=='__new__');calcVacDur();}
@@ -1688,6 +1843,11 @@ async function saveVac(id){
     if((type.includes('سنوية')||type==='annual')&&(30-au+60-su)<dur){showMsg('vf_msg','err','❌ الرصيد الإجمالي لا يكفي');return;}
     if((type.includes('مجدولة')||type==='sched')&&(60-su)<dur){showMsg('vf_msg','err','❌ رصيد المجدولة لا يكفي');return;}
   }
+  // منع التكرار — نفس الموظف في نفس التواريخ
+  if(!id){
+    const existing=lsGetAll('إجازات').find(v=>v.empId===eid&&v.startDate===s&&v.endDate===e&&v.vacType===type);
+    if(existing){showMsg('vf_msg','err','⚠️ هذه الإجازة مسجّلة بالفعل');return;}
+  }
   await dbSave('إجازات',{id:id||uid(),name:n,empId:eid,mobile:mob,shift:sh,vacType:type,center:ctr,startDate:s,endDate:e,duration:dur});
   $('vacFormWrap').classList.add('hidden');loadVacPage();toast('✅ تم حفظ الإجازة');
 }
@@ -1723,7 +1883,13 @@ async function editVac(id){const r=(await dbAll('إجازات')).find(x=>x.id===
 async function loadOTPage(){
   const eid=CU.empId;
   const all=await dbAll('اضافي');
-  const recs=isEmp()?all.filter(o=>o.empId===eid):all;
+  let recs;
+  if(isAdm()) recs=all;
+  else if(isSup()&&!EMP_MODE){
+    const sEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+    sEmps.push(CU.empId);
+    recs=all.filter(o=>sEmps.includes(o.empId));
+  } else recs=all.filter(o=>o.empId===eid);
   const now=new Date();
   const mOT=recs.filter(o=>new Date(o.date).getMonth()===now.getMonth()&&new Date(o.date).getFullYear()===now.getFullYear());
   const tot=mOT.reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
@@ -1733,7 +1899,7 @@ async function loadOTPage(){
 }
 function showOTForm(ot=null){
   $('otFormWrap').innerHTML=`<div class="fsec"><h4>⏰ ${ot?'تعديل':'إضافة'} عمل إضافي</h4>
-    ${isSup()&&!EMP_MODE?`<div class="fg"><label>🔍 بحث</label><input id="of_q" oninput="autoFill('of_q','of_n','of_eid','of_mob','of_sh')" placeholder="رقم الوظيفي..."/></div>`:''}
+    ${isSup()&&!EMP_MODE?`<div class="fg"><label>👥 اختر موظفاً</label><select id="of_sel" onchange="selEmpFill('of_sel','of_n','of_eid','of_mob','of_sh',null)"><option value="">— اختر —</option></select></div>`:''}
     <div class="frow">
       <div class="fg"><label>👤 الاسم</label><input id="of_n" value="${ot?.name||''}" readonly/></div>
       <div class="fg"><label>🔢 الوظيفي</label><input id="of_eid" value="${ot?.empId||''}" readonly/></div>
@@ -1755,11 +1921,17 @@ function showOTForm(ot=null){
       <button class="btn btn-s" onclick="$('otFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('otFormWrap').classList.remove('hidden');
-  prefill('of_n','of_eid','of_mob','of_sh');
+  if(isSup()&&!EMP_MODE) buildEmpSelect('of_sel', ot?.empId||'').then(()=>{if(ot?.empId) selEmpFill('of_sel','of_n','of_eid','of_mob','of_sh',null);});
+  else prefill('of_n','of_eid','of_mob','of_sh');
 }
 async function saveOT(id){
   const n=$v('of_n').trim(),eid=$v('of_eid').trim(),mob=$v('of_mob').trim(),sh=$v('of_sh')||CU?.shift,dt=$v('of_dt'),day=$v('of_day'),hrs=parseFloat($v('of_hrs')),note=$v('of_note').trim();
   if(!n||!eid||!dt||!hrs||hrs<=0){showMsg('of_msg','err','الحقول المطلوبة *');return;}
+  // منع التكرار — نفس الموظف في نفس التاريخ
+  if(!id){
+    const existOT=lsGetAll('اضافي').find(o=>o.empId===eid&&o.date===dt);
+    if(existOT){showMsg('of_msg','warn','⚠️ يوجد سجل إضافي لهذا الموظف في '+dt+'. هل تريد إضافة سجل آخر؟ (سيتم الحفظ)');} // تحذير فقط، لا منع
+  }
   await dbSave('اضافي',{id:id||uid(),name:n,empId:eid,mobile:mob,shift:sh,date:dt,day:day||arDay(dt),hours:hrs,notes:note,received:false});
   $('otFormWrap').classList.add('hidden');loadOTPage();toast('✅ تم الحفظ');
 }
@@ -1788,11 +1960,21 @@ async function editOT(id){const r=(await dbAll('اضافي')).find(x=>x.id===id)
 /* ══════════════════════════════════════════════════════
    البطاقات
 ══════════════════════════════════════════════════════ */
-async function loadCardPage(){const all=await dbAll('بطاقات');renderCards(isEmp()?all.filter(c=>c.empId===CU.empId):all);}
+async function loadCardPage(){
+  const all=await dbAll('بطاقات');
+  let filtered;
+  if(isAdm()) filtered=all;
+  else if(isSup()&&!EMP_MODE){
+    const sEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+    sEmps.push(CU.empId);
+    filtered=all.filter(r=>sEmps.includes(r.empId)||r.shift===CU.shift);
+  } else filtered=all.filter(r=>r.empId===CU.empId);
+  renderCards(filtered);
+}
 function showCardForm(c=null){
   const ct=[...CARD_TYPES_DEF,...JSON.parse(localStorage.getItem('customCardTypes')||'[]')];
   $('cardFormWrap').innerHTML=`<div class="fsec"><h4>💳 ${c?'تعديل بطاقة':'إضافة بطاقة'}</h4>
-    ${isSup()&&!EMP_MODE?`<div class="fg"><label>🔍 بحث</label><input id="cdf_q" oninput="autoFill('cdf_q','cdf_n','cdf_eid','cdf_mob',null)" placeholder="رقم الوظيفي..."/></div>`:''}
+    ${isSup()&&!EMP_MODE?`<div class="fg"><label>👥 اختر موظفاً</label><select id="cdf_sel" onchange="selEmpFill('cdf_sel','cdf_n','cdf_eid','cdf_mob',null,null)"><option value="">— اختر —</option></select></div>`:''}
     <div class="frow">
       <div class="fg"><label>👤 الاسم</label><input id="cdf_n" value="${c?.name||''}" readonly/></div>
       <div class="fg"><label>🔢 الوظيفي</label><input id="cdf_eid" value="${c?.empId||''}" readonly/></div>
@@ -1814,7 +1996,8 @@ function showCardForm(c=null){
       <button class="btn btn-s" onclick="$('cardFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('cardFormWrap').classList.remove('hidden');
-  prefill('cdf_n','cdf_eid','cdf_mob',null);
+  if(isSup()&&!EMP_MODE) buildEmpSelect('cdf_sel', c?.empId||'').then(()=>{if(c?.empId) selEmpFill('cdf_sel','cdf_n','cdf_eid','cdf_mob',null,null);});
+  else prefill('cdf_n','cdf_eid','cdf_mob',null);
   if(c?.expiryDate) calcRemain();
 }
 const CARD_TYPES_DEF=['بطاقة عمل','بطاقة مصدر'];
@@ -1852,10 +2035,20 @@ function renderCards(recs){
 async function editCard(id){const r=(await dbAll('بطاقات')).find(x=>x.id===id);if(r){showCardForm(r);$('cardFormWrap').scrollIntoView({behavior:'smooth'});}}
 
 /* ══ الملابس ══ */
-async function loadClothPage(){const all=await dbAll('ملابس');renderCloths(isEmp()?all.filter(c=>c.empId===CU.empId):all);}
+async function loadClothPage(){
+  const all=await dbAll('ملابس');
+  let filtered;
+  if(isAdm()) filtered=all;
+  else if(isSup()&&!EMP_MODE){
+    const sEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+    sEmps.push(CU.empId);
+    filtered=all.filter(r=>sEmps.includes(r.empId)||r.shift===CU.shift);
+  } else filtered=all.filter(r=>r.empId===CU.empId);
+  renderCloths(filtered);
+}
 function showClothForm(cl=null){
   $('clothFormWrap').innerHTML=`<div class="fsec"><h4>👕 ${cl?'تعديل مقاسات':'إضافة مقاسات ملابس'}</h4>
-    ${isSup()&&!EMP_MODE?`<div class="fg"><label>🔍 بحث</label><input id="clf_q" oninput="autoFill('clf_q','clf_n','clf_eid','clf_mob',null)" placeholder="رقم الوظيفي..."/></div>`:''}
+    ${isSup()&&!EMP_MODE?`<div class="fg"><label>👥 اختر موظفاً</label><select id="clf_sel" onchange="selEmpFill('clf_sel','clf_n','clf_eid','clf_mob',null,null)"><option value="">— اختر —</option></select></div>`:''}
     <div class="frow">
       <div class="fg"><label>👤 الاسم</label><input id="clf_n" value="${cl?.name||''}" readonly/></div>
       <div class="fg"><label>🔢 الوظيفي</label><input id="clf_eid" value="${cl?.empId||''}" readonly/></div>
@@ -1892,10 +2085,20 @@ function renderCloths(recs){
 async function editCloth(id){const r=(await dbAll('ملابس')).find(x=>x.id===id);if(r){showClothForm(r);$('clothFormWrap').scrollIntoView({behavior:'smooth'});}}
 
 /* ══ المركز والسيارة ══ */
-async function loadVehPage(){const all=await dbAll('مركبات');renderVehs(isEmp()?all.filter(v=>v.empId===CU.empId):all);}
+async function loadVehPage(){
+  const all=await dbAll('مركبات');
+  let filtered;
+  if(isAdm()) filtered=all;
+  else if(isSup()&&!EMP_MODE){
+    const sEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+    sEmps.push(CU.empId);
+    filtered=all.filter(r=>sEmps.includes(r.empId)||r.shift===CU.shift);
+  } else filtered=all.filter(r=>r.empId===CU.empId);
+  renderVehs(filtered);
+}
 function showVehForm(v=null){
   $('vehFormWrap').innerHTML=`<div class="fsec"><h4>🚗 ${v?'تعديل':'إضافة'} بيانات المركز والسيارة</h4>
-    ${isSup()&&!EMP_MODE?`<div class="fg"><label>🔍 بحث</label><input id="vhf_q" oninput="autoFill('vhf_q','vhf_n','vhf_eid','vhf_mob','vhf_sh')" placeholder="رقم الوظيفي..."/></div>`:''}
+    ${isSup()&&!EMP_MODE?`<div class="fg"><label>👥 اختر موظفاً</label><select id="vhf_sel" onchange="selEmpFill('vhf_sel','vhf_n','vhf_eid','vhf_mob','vhf_sh',null)"><option value="">— اختر —</option></select></div>`:''}
     <div class="frow">
       <div class="fg"><label>👤 الاسم</label><input id="vhf_n" value="${v?.name||''}" readonly/></div>
       <div class="fg"><label>🔢 الوظيفي</label><input id="vhf_eid" value="${v?.empId||''}" readonly/></div>
@@ -1957,6 +2160,10 @@ async function saveSup(id){
   if(id===undefined) id=_editSupId;
   const n=$v('sf_n').trim(),eid=$v('sf_id').trim(),m=$v('sf_m').trim(),sh=$v('sf_sh');
   if(!n||!eid||!m){showMsg('sf_m2','err','الحقول *');return;}
+  // منع التكرار
+  const allSups=await dbAll('مشرفون');
+  const dupSup=allSups.find(s=>s.empId===eid&&s.id!==id);
+  if(dupSup){showMsg('sf_m2','err','⚠️ الرقم الوظيفي '+eid+' مسجّل بالفعل للمشرف: '+dupSup.name);return;}
   const supRow={id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,role:'sup'};
   await dbSave('مشرفون',supRow);
 
@@ -2361,50 +2568,63 @@ function addCT(key,inputId,cb){const v=($v(inputId)||'').trim();if(!v)return;con
 function rmCT(key,t,cb){localStorage.setItem(key,JSON.stringify(JSON.parse(localStorage.getItem(key)||'[]').filter(x=>x!==t)));cb();}
 async function exportCSV(sheetName,fname,filterShift=null){
   let data=await dbAll(sheetName);
-  if(!data.length){toast('لا توجد بيانات للتصدير','err');return;}
+  if(!data.length){toast('لا توجد بيانات','err');return;}
 
-  // المشرف يرى وردييته فقط
-  if(!isAdm()&&CU.role==='sup'){
-    const hasShift=data.some(r=>r.shift!==undefined);
-    if(hasShift) data=data.filter(r=>r.shift===CU.shift);
-    else{
-      const shiftEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
-      data=data.filter(r=>shiftEmps.includes(r.empId));
+  // ── فلترة حسب الصلاحية ──
+  const viewShift = isAdm()?null:(CU.shift); // المشرف يرى وردييته فقط
+  if(viewShift){
+    const hasShift=data.some(r=>r.shift!==undefined&&r.shift!=='');
+    if(hasShift){
+      data=data.filter(r=>r.shift===viewShift);
+    } else {
+      // جداول بدون عمود shift — فلترة بالموظفين
+      const myEmps=lsGetAll('موظفون').filter(e=>e.shift===viewShift).map(e=>e.empId);
+      data=data.filter(r=>myEmps.includes(r.empId));
     }
   }
   if(filterShift) data=data.filter(r=>r.shift===filterShift);
   if(!data.length){toast('لا توجد بيانات لوردييتك','err');return;}
 
-  // خريطة ترجمة الأعمدة
+  // ── خريطة الترجمة ──
   const CM={id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
     shift:'الوردية',position:'المنصب',region:'المنطقة',center:'المركز',
     vacType:'نوع الإجازة',startDate:'تاريخ البداية',endDate:'تاريخ النهاية',
-    duration:'المدة (أيام)',date:'التاريخ',day:'اليوم',hours:'الساعات',
+    duration:'المدة',date:'التاريخ',day:'اليوم',hours:'الساعات',
     notes:'ملاحظات',received:'تم الاستلام',cardType:'نوع البطاقة',
-    expiryDate:'تاريخ الانتهاء',shirt:'قميص CAT2',trouser:'بنطلون CAT2',
-    shoe:'حذاء السيفتي',cat24:'CAT24',car:'رقم السيارة',
-    transferDate:'تاريخ النقل',transferFrom:'نُقل من',
+    expiryDate:'تاريخ الانتهاء',shirt:'قميص',trouser:'بنطلون',
+    shoe:'حذاء',cat24:'CAT24',car:'السيارة',
     annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة',role:'الدور'};
 
-  // استثنِ عمود id الداخلي
   const keys=Object.keys(data[0]).filter(k=>k!=='id');
   const hdrs=keys.map(k=>CM[k]||k);
 
-  // استخدم Tab كفاصل (يعمل بشكل مثالي في Excel)
-  const SEP='\t';
-  const NL='\n';
-  const lines=[hdrs.join(SEP)];
-  data.forEach(row=>{
-    lines.push(keys.map(k=>{
+  // ── بناء HTML Table يُفتح مباشرة في Excel ──
+  const rows=data.map(row=>
+    '<tr>'+keys.map(k=>{
       const v=row[k];
-      if(v===undefined||v===null) return '';
-      // أزل الـ tabs والأسطر الجديدة من القيم
-      return String(v).replace(/\t/g,' ').replace(/\n/g,' ');
-    }).join(SEP));
-  });
+      return '<td>'+String(v!==undefined&&v!==null?v:'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</td>';
+    }).join('')+'</tr>'
+  ).join('\n');
 
-  const content='\uFEFF'+lines.join(NL);
-  const blob=new Blob([content],{type:'text/tab-separated-values;charset=utf-8'});
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" '+
+    'xmlns:x="urn:schemas-microsoft-com:office:excel" '+
+    'xmlns="http://www.w3.org/TR/REC-html40">'+
+    '<head><meta charset="UTF-8">'+
+    '<xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+    '<x:Name>'+fname+'</x:Name>'+
+    '<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>'+
+    '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>'+
+    '<style>'+
+    'th{background:#1e293b;color:white;font-weight:bold;text-align:center;padding:6px;}'+
+    'td{text-align:center;padding:5px;border:1px solid #e2e8f0;}'+
+    'tr:nth-child(even)td{background:#f8fafc;}'+
+    '</style></head><body dir="rtl">'+
+    '<table border="1">'+
+    '<thead><tr>'+hdrs.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+    '</table></body></html>';
+
+  const blob=new Blob(['\uFEFF'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   const d=new Date();
@@ -2412,7 +2632,7 @@ async function exportCSV(sheetName,fname,filterShift=null){
   a.download=fname+'_'+d.getFullYear()+'_'+(d.getMonth()+1)+'_'+d.getDate()+'.xls';
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
-  toast('\u2705 تم تصدير '+data.length+' سجل — افتح الملف بـ Excel');
+  toast('\u2705 تم تصدير '+data.length+' سجل');
 }
 
 // 11+12. تصدير PDF صحيح — بيانات الموظف الحالي
@@ -2480,29 +2700,30 @@ async function exportShiftCSV(){
 
   const hdrs=['الاسم','الرقم الوظيفي','الجوال','الوردية','المنطقة','المركز',
     'المنصب','رصيد سنوية','رصيد مجدولة','إجازات مستخدمة','إضافي السنة','البطاقات'];
-  const SEP='\t', NL='\n';
-  const lines=[hdrs.join(SEP)];
 
-  shiftEmps.forEach(e=>{
+  const rows=shiftEmps.map(e=>{
     const annQ=parseInt(e.annualQuota)||30, schQ=parseInt(e.schedQuota)||60;
     const av=vacs.filter(v=>v.empId===e.empId);
     const au=av.filter(v=>v.vacType==='annual'||v.vacType.includes('سنوية')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
     const su=av.filter(v=>v.vacType==='sched'||v.vacType.includes('مجدولة')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
     const otYr=ots.filter(o=>o.empId===e.empId&&new Date(o.date).getFullYear()===yr).reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
-    const ec=cards.filter(c=>c.empId===e.empId).map(c=>c.cardType+' ('+c.expiryDate+')').join(' | ');
-    lines.push([
-      e.name, e.empId, e.mobile, e.shift, e.region||'-', e.center||'-',
-      e.position||'-',
-      (annQ-au)+'/'+annQ,
-      (schQ-su)+'/'+schQ,
-      au+su,
-      otYr+'س',
-      ec||'-'
-    ].map(v=>String(v||'').replace(/\t/g,' ').replace(/\n/g,' ')).join(SEP));
+    const ec=cards.filter(c=>c.empId===e.empId).map(c=>c.cardType).join(' | ');
+    return [e.name,e.empId,e.mobile,e.shift,e.region||'-',e.center||'-',
+      e.position||'-',(annQ-au)+'/'+annQ,(schQ-su)+'/'+schQ,
+      au+su,otYr+'س',ec||'-'];
   });
 
-  const content='\uFEFF'+lines.join(NL);
-  const blob=new Blob([content],{type:'text/tab-separated-values;charset=utf-8'});
+  const htmlRows=rows.map(r=>'<tr>'+r.map(v=>'<td>'+String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>').join('')+'</tr>').join('\n');
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+    '<head><meta charset="UTF-8"><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+    '<x:Name>وردية '+shift+'</x:Name><x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>'+
+    '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>'+
+    '<style>th{background:#1e293b;color:white;font-weight:bold;text-align:center;padding:6px;}td{text-align:center;padding:5px;border:1px solid #e2e8f0;}tr:nth-child(even)td{background:#f8fafc;}</style>'+
+    '</head><body dir="rtl"><table border="1">'+
+    '<thead><tr>'+hdrs.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead>'+
+    '<tbody>'+htmlRows+'</tbody></table></body></html>';
+
+  const blob=new Blob(['\uFEFF'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
