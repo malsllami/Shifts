@@ -653,7 +653,7 @@ async function getOTYear(empId){
 /* ══════════════════════════════════════════════════════
    المصادقة
 ══════════════════════════════════════════════════════ */
-let CU=null, EMP_MODE=false, _editEmpId='', _editAnnQ=30, _editSchQ=60;
+let CU=null, EMP_MODE=false, _editEmpId='', _editAnnQ=30, _editSchQ=60, _editSupId='';
 
 // بيانات المدير الافتراضية (تُقرأ من الإعدادات)
 const DEF_ADMIN={empId:'63656',mobile:'0555889581',name:'المدير',shift:'أ'};
@@ -694,7 +694,9 @@ async function doLogin(){
     const supsLocal=lsGetAll('مشرفون');
     const sup=supsLocal.find(s=>s.empId===id&&s.mobile===pw);
     if(sup){
-      CU={...sup,role:'sup'};
+      // دمج بيانات الموظف مع بيانات المشرف
+      const empLocal=lsGetAll('موظفون').find(e=>e.empId===id)||{};
+      CU={...empLocal,...sup,role:'sup'};
       setBar(100,'✅ مرحباً '+sup.name);
       setTimeout(()=>launchApp(),400);return;
     }
@@ -718,7 +720,11 @@ async function doLogin(){
       }
       const sups=await dbAll('مشرفون');
       const sup2=sups.find(s=>s.empId===id&&s.mobile===pw);
-      if(sup2){CU={...sup2,role:'sup'};setBar(100,'✅ مرحباً '+sup2.name);setTimeout(()=>launchApp(),400);return;}
+      if(sup2){
+        const empData2=emps.find(e=>e.empId===id)||{};
+        CU={...empData2,...sup2,role:'sup'};
+        setBar(100,'✅ مرحباً '+sup2.name);setTimeout(()=>launchApp(),400);return;
+      }
       const emps=await dbAll('موظفون');
       const emp2=emps.find(e=>e.empId===id&&e.mobile===pw);
       if(emp2){CU={...emp2,role:'emp'};setBar(100,'✅ مرحباً '+emp2.name);setTimeout(()=>launchApp(),400);return;}
@@ -1928,24 +1934,54 @@ async function editVeh(id){const r=(await dbAll('مركبات')).find(x=>x.id===
 
 /* ══ المشرفون ══ */
 function showSupForm(s=null){
-  openModal(s?'✏️ تعديل: '+s.name:'➕ مشرف جديد',`
-    <div class="fg"><label>👤 الاسم *</label><input id="sf_n" value="${s?.name||''}"/></div>
-    <div class="frow">
-      <div class="fg"><label>🔢 الوظيفي *</label><input id="sf_id" value="${s?.empId||''}"/></div>
-      <div class="fg"><label>📱 الجوال (= كلمة المرور) *</label><input id="sf_m" value="${s?.mobile||''}" dir="ltr"/></div>
-    </div>
-    <div class="fg"><label>🔄 الوردية</label><select id="sf_sh">${SHIFTS.map(x=>`<option ${s?.shift===x?'selected':''}>${x}</option>`).join('')}</select></div>
-    <div id="sf_m2"></div>
-    <div class="bgroup mt12">
-      <button class="btn btn-p" onclick="saveSup('${s?.id||''}')">💾 حفظ</button>
-      <button class="btn btn-s" onclick="closeModal()">إلغاء</button>
-    </div>`);
+  _editSupId=s?.id||'';
+  const nm=s?.name||'',eid=s?.empId||'',mob=s?.mobile||'',sh=s?.shift||SHIFTS[0];
+  const body=
+    '<div class="msg msg-info mb8">💡 المشرف يُضاف تلقائياً في جدول الموظفين مع صلاحيات أوسع</div>'+
+    '<div class="fg"><label>👤 الاسم الكامل *</label><input id="sf_n" value="'+nm.replace(/"/g,'&quot;')+'"/></div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label>🔢 الرقم الوظيفي *</label><input id="sf_id" value="'+eid+'"/></div>'+
+    '<div class="fg"><label>📱 الجوال (= كلمة المرور) *</label><input id="sf_m" value="'+mob+'" dir="ltr"/></div>'+
+    '</div>'+
+    '<div class="fg"><label>🔄 الوردية</label><select id="sf_sh">'+
+    SHIFTS.map(x=>'<option'+(sh===x?' selected':'')+'>'+x+'</option>').join('')+
+    '</select></div>'+
+    '<div id="sf_m2"></div>'+
+    '<div class="bgroup mt12">'+
+    '<button class="btn btn-p" onclick="saveSup()">💾 حفظ</button>'+
+    '<button class="btn btn-s" onclick="closeModal()">إلغاء</button>'+
+    '</div>';
+  openModal(s?'✏️ تعديل: '+nm:'➕ مشرف جديد', body);
 }
 async function saveSup(id){
+  if(id===undefined) id=_editSupId;
   const n=$v('sf_n').trim(),eid=$v('sf_id').trim(),m=$v('sf_m').trim(),sh=$v('sf_sh');
   if(!n||!eid||!m){showMsg('sf_m2','err','الحقول *');return;}
-  await dbSave('مشرفون',{id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,role:'sup'});
-  closeModal();loadSups();toast('✅ تم الحفظ');
+  const supRow={id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,role:'sup'};
+  await dbSave('مشرفون',supRow);
+
+  // ── المشرف يكون موظفاً أيضاً في جدول الموظفين ──
+  const emps=await dbAll('موظفون');
+  const existing=emps.find(e=>e.empId===eid);
+  if(!existing){
+    // أضفه في جدول الموظفين إذا لم يكن موجوداً
+    const empRow={id:'emp_'+supRow.id,name:n,empId:eid,mobile:m,shift:sh,
+      position:'مشرف',annualQuota:30,schedQuota:60};
+    await dbSave('موظفون',empRow);
+    toast('✅ تم إضافة المشرف في جدول الموظفين أيضاً');
+  } else {
+    // حدّث وردييته إذا تغيرت
+    if(existing.shift!==sh){
+      existing.shift=sh;
+      existing.transferDate=new Date().toISOString().split('T')[0];
+      existing.transferFrom=existing.shift;
+      await dbSave('موظفون',existing);
+    }
+  }
+  // امسح الكاش ليُعاد جلب البيانات
+  delete _cache['موظفون'];
+  delete _cache['مشرفون'];
+  closeModal();loadSups();toast('✅ تم الحفظ والمزامنة');
 }
 async function loadSups(){
   const recs=await dbAll('مشرفون');
@@ -1974,149 +2010,232 @@ async function delRec(sh,id,cb){
    ربط Google Sheets
 ══════════════════════════════════════════════════════ */
 const SCRIPT_CODE=`
-// ═══════════════════════════════════════════════════
-// نظام إدارة الورديات — Google Apps Script
-// Deploy: Web App | Execute: Me | Access: Anyone
-// الجداول تُنشأ تلقائياً — لا حاجة لإنشاء أي شيء يدوياً
-// ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// نظام إدارة الورديات — Google Apps Script v2
+// نشر: Web App | Execute: Me | Access: Anyone
+// الجداول تُنشأ تلقائياً بأسماء عربية
+// ═══════════════════════════════════════════════════════════
 const SS_ID = '1nH-sSKeYtnJQHOckgKlBqpts5jK8uXOAEsa579cyZqU';
 const MAIL  = '63656m@gmail.com';
+
+// ── خريطة الترجمة (إنجليزي → عربي) ──
+const COL={
+  id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
+  shift:'الوردية',position:'المنصب',region:'المنطقة',center:'المركز',
+  vacType:'نوع الإجازة',startDate:'تاريخ البداية',endDate:'تاريخ النهاية',
+  duration:'المدة',date:'التاريخ',day:'اليوم',hours:'الساعات',
+  notes:'ملاحظات',received:'تم الاستلام',cardType:'نوع البطاقة',
+  expiryDate:'تاريخ الانتهاء',shirt:'قميص CAT2',trouser:'بنطلون CAT2',
+  shoe:'حذاء السيفتي',cat24:'CAT24',car:'رقم السيارة',
+  transferDate:'تاريخ النقل',transferFrom:'نُقل من',role:'الدور',
+  annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة',
+  key:'المفتاح',value:'القيمة',timestamp:'الوقت'
+};
+function ar(k){ return COL[k]||k; }
 
 function doGet(e){
   const p=e.parameter, ss=SpreadsheetApp.openById(SS_ID);
   try{
     let r;
     switch(p.action){
-      case 'getAll':       r=getAll(ss,p.sheet); break;
-      case 'save':         r=saveRow(ss,p.sheet,JSON.parse(p.row)); break;
-      case 'del':          r=delRow(ss,p.sheet,p.id); break;
-      case 'getSetting':   r=getSetting(ss,p.key,p.def||''); break;
-      case 'setSetting':   r=setSetting(ss,p.key,p.value); break;
-      case 'log':          r=addLog(ss,JSON.parse(p.data||'{}')); break;
-      default:             r={ok:0,error:'unknown'};
+      case 'getAll':     r=getAll(ss,p.sheet); break;
+      case 'save':       r=saveRow(ss,p.sheet,JSON.parse(p.row)); break;
+      case 'del':        r=delRow(ss,p.sheet,p.id); break;
+      case 'getSetting': r=getSetting(ss,p.key,p.def||''); break;
+      case 'setSetting': r=setSetting(ss,p.key,p.value); break;
+      case 'log':        r=addLog(ss,JSON.parse(p.data||'{}')); break;
+      default:           r={ok:0,error:'unknown action'};
     }
     return out(r);
   }catch(err){ return out({ok:0,error:err.message}); }
 }
 
-function out(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function out(o){
+  return ContentService.createTextOutput(JSON.stringify(o))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ── الحصول على صفحة أو إنشاؤها ──
 function sheet(ss,n){ return ss.getSheetByName(n)||ss.insertSheet(n); }
 
+// ── تنسيق رأس الجدول ──
+function fmtHeader(s){
+  if(s.getLastRow()<1) return;
+  const lc=s.getLastColumn(); if(lc<1) return;
+  const hdr=s.getRange(1,1,1,lc);
+  hdr.setBackground('#1e293b')
+     .setFontColor('#ffffff')
+     .setFontWeight('bold')
+     .setHorizontalAlignment('center')
+     .setVerticalAlignment('middle')
+     .setFontSize(10);
+  s.setFrozenRows(1);
+  s.setRowHeight(1,30);
+  // توسيط بقية البيانات
+  if(s.getLastRow()>1){
+    s.getRange(2,1,s.getLastRow()-1,lc).setHorizontalAlignment('center');
+  }
+  // ضبط عرض الأعمدة
+  for(let i=1;i<=lc;i++) s.autoResizeColumn(i);
+}
+
+// ── حفظ خريطة المفاتيح في الخلية A1 ──
+// هذه الخلية تظهر فارغة لأن قيمتها هي خريطة JSON
+// الحل: لا نضعها في A1، نضع كل الأعمدة العربية بدءاً من A
+
+// ── قراءة كل البيانات ──
 function getAll(ss,name){
-  const s=sheet(ss,name), d=s.getDataRange().getValues();
+  const s=sheet(ss,name);
+  const d=s.getDataRange().getValues();
   if(d.length<2) return{ok:1,data:[]};
-  // حاول قراءة المفاتيح الإنجليزية من ملاحظة الخلية الأولى
-  let h=d[0];
+  // الصف الأول: أسماء عربية
+  // نحتاج الأسماء الإنجليزية للعودة
+  // نحفظها في cell note
+  const arHeaders=d[0];
+  let enHeaders=arHeaders; // افتراضياً
   try{
     const note=s.getRange(1,1).getNote();
-    if(note) h=JSON.parse(note);
+    if(note) enHeaders=JSON.parse(note);
   }catch(e){}
-  return{ok:1,data:d.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=r[i]);return o;}).filter(r=>r.id!==''&&r.id!==undefined)};
-}
-// خريطة ترجمة الأعمدة إلى عربية
-const COL_AR={
-  id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
-  shift:'الوردية',position:'المنصب',region:'المنطقة',center:'المركز',
-  vacType:'نوع الإجازة',startDate:'تاريخ البداية',endDate:'تاريخ النهاية',
-  duration:'المدة',center:'مركز الانطلاق',date:'التاريخ',day:'اليوم',
-  hours:'الساعات',notes:'ملاحظات',received:'تم الاستلام',
-  cardType:'نوع البطاقة',expiryDate:'تاريخ الانتهاء',
-  shirt:'قميص',trouser:'بنطلون',shoe:'حذاء',cat24:'CAT24',
-  car:'السيارة',transferDate:'تاريخ النقل',transferFrom:'نقل من',
-  annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة',
-  key:'المفتاح',value:'القيمة',role:'الدور',
-  timestamp:'الوقت',adminId:'رقم المدير',adminName:'اسم المدير'
-};
-function arKey(k){return COL_AR[k]||k;}
-
-function formatHeader(sheet){
-  const lr=sheet.getLastRow();if(lr<1)return;
-  const lc=sheet.getLastColumn();if(lc<1)return;
-  const hdr=sheet.getRange(1,1,1,lc);
-  hdr.setBackground('#1e293b').setFontColor('#ffffff').setFontWeight('bold')
-     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sheet.setFrozenRows(1);
-  sheet.getRange(1,1,Math.max(lr,2),lc).setHorizontalAlignment('center');
+  return{ok:1,data:d.slice(1).map(r=>{
+    const o={};
+    enHeaders.forEach((k,i)=>{ if(r[i]!==''&&r[i]!==undefined) o[k]=r[i]; });
+    return o;
+  }).filter(r=>r.id)};
 }
 
+// ── حفظ أو تحديث صف ──
 function saveRow(ss,name,row){
   const s=sheet(ss,name);
+  const keysEn=Object.keys(row);
+  const keysAr=keysEn.map(ar);
   let d=s.getDataRange().getValues();
-  if(!d.length||!d[0].length){
-    // إنشاء الجدول لأول مرة: أسماء عربية في الصف الأول، مفاتيح إنجليزية في الصف الثاني (مخفي)
-    const keysEn=Object.keys(row);
-    const keysAr=keysEn.map(arKey);
+
+  // جدول جديد: أنشئ رأس بأسماء عربية
+  if(!d.length||!d[0].length||!d[0][0]){
+    s.clearContents();
     s.getRange(1,1,1,keysAr.length).setValues([keysAr]);
-    s.appendRow(keysEn.map(k=>row[k]!==undefined?row[k]:''));
-    // حفظ المفاتيح الإنجليزية في ملاحظة الصف الأول (مخفية)
+    // احفظ المفاتيح الإنجليزية في note الخلية A1
     s.getRange(1,1).setNote(JSON.stringify(keysEn));
-    formatHeader(s);
+    s.appendRow(keysEn.map(k=>row[k]!==undefined?row[k]:''));
+    fmtHeader(s);
     return{ok:1};
   }
-  let h=d[0];
-  Object.keys(row).filter(k=>!h.includes(k)).forEach(k=>{h.push(k);s.getRange(1,h.length).setValue(k);});
-  const ii=h.indexOf('id');
+
+  // جدول موجود: اقرأ المفاتيح الإنجليزية من note
+  let hEn=keysEn;
+  let hAr=d[0];
+  try{
+    const note=s.getRange(1,1).getNote();
+    if(note) hEn=JSON.parse(note);
+  }catch(e){}
+
+  // أضف أعمدة جديدة إن وجدت
+  const newKeys=keysEn.filter(k=>!hEn.includes(k));
+  if(newKeys.length){
+    newKeys.forEach(k=>{
+      hEn.push(k);
+      hAr.push(ar(k));
+      s.getRange(1,hEn.length).setValue(ar(k));
+      s.getRange(1,hEn.length).setBackground('#1e293b').setFontColor('#fff').setFontWeight('bold');
+    });
+    s.getRange(1,1).setNote(JSON.stringify(hEn));
+  }
+
+  // ابحث عن الصف لتحديثه
+  const idIdx=hEn.indexOf('id');
   for(let i=1;i<d.length;i++){
-    if(String(d[i][ii])===String(row.id)){
-      s.getRange(i+1,1,1,h.length).setValues([h.map(k=>row[k]!==undefined?row[k]:'')]);
+    if(String(d[i][idIdx])===String(row.id)){
+      s.getRange(i+1,1,1,hEn.length)
+       .setValues([hEn.map(k=>row[k]!==undefined?row[k]:'')]);
+      s.getRange(i+1,1,1,hEn.length).setHorizontalAlignment('center');
       return{ok:1};
     }
   }
-  s.appendRow(h.map(k=>row[k]!==undefined?row[k]:''));
+  // أضف صف جديد
+  s.appendRow(hEn.map(k=>row[k]!==undefined?row[k]:''));
+  const lr=s.getLastRow();
+  s.getRange(lr,1,1,hEn.length).setHorizontalAlignment('center');
+  fmtHeader(s);
   return{ok:1};
 }
+
+// ── حذف صف ──
 function delRow(ss,name,id){
-  const s=sheet(ss,name), d=s.getDataRange().getValues();
+  const s=sheet(ss,name);
+  const d=s.getDataRange().getValues();
   if(d.length<2) return{ok:1};
-  const ii=d[0].indexOf('id');
+  let hEn=d[0];
+  try{ const n=s.getRange(1,1).getNote(); if(n) hEn=JSON.parse(n); }catch(e){}
+  const ii=hEn.indexOf('id');
   for(let i=1;i<d.length;i++){
     if(String(d[i][ii])===String(id)){s.deleteRow(i+1);return{ok:1};}
   }
   return{ok:0,error:'not found'};
 }
+
+// ── الإعدادات ──
 function getSetting(ss,key,def){
-  const s=sheet(ss,'اعدادات'), d=s.getDataRange().getValues();
-  if(d.length<2){s.getRange(1,1,1,2).setValues([['key','value']]);return{ok:1,value:def||''};}
-  for(let i=1;i<d.length;i++) if(String(d[i][0])===String(key)) return{ok:1,value:String(d[i][1])};
-  return{ok:1,value:def||''};
+  const s=sheet(ss,'اعدادات');
+  const d=s.getDataRange().getValues();
+  if(d.length<2) return{ok:1,value:def};
+  for(let i=1;i<d.length;i++){
+    if(String(d[i][0])===String(key)) return{ok:1,value:String(d[i][1])};
+  }
+  return{ok:1,value:def};
 }
 function setSetting(ss,key,value){
   const s=sheet(ss,'اعدادات');
   let d=s.getDataRange().getValues();
-  if(!d.length||!d[0].length){s.getRange(1,1,1,2).setValues([['key','value']]);d=s.getDataRange().getValues();}
-  for(let i=1;i<d.length;i++){if(String(d[i][0])===String(key)){s.getRange(i+1,2).setValue(value);return{ok:1};}}
+  if(!d.length||!d[0].length){
+    s.getRange(1,1,1,2).setValues([['المفتاح','القيمة']]);
+    s.getRange(1,1).setNote(JSON.stringify(['key','value']));
+    fmtHeader(s);
+  }
+  d=s.getDataRange().getValues();
+  for(let i=1;i<d.length;i++){
+    if(String(d[i][0])===String(key)){s.getRange(i+1,2).setValue(value);return{ok:1};}
+  }
   s.appendRow([key,value]);
   return{ok:1};
 }
+
+// ── تسجيل الزيارات ──
 function addLog(ss,data){
   const s=sheet(ss,'سجل');
-  if(s.getLastRow()===0) s.getRange(1,1,1,4).setValues([['تاريخ','وقت','رقم الوظيفي','الدور']]);
+  if(s.getLastRow()===0){
+    s.getRange(1,1,1,4).setValues([['التاريخ','الوقت','الرقم الوظيفي','الدور']]);
+    s.getRange(1,1).setNote(JSON.stringify(['date','time','empId','role']));
+    fmtHeader(s);
+  }
   s.appendRow([data.date,data.time,data.empId,data.role]);
   return{ok:1};
 }
 
-// ── تقرير يومي الساعة 12 ──
-// Triggers > Add trigger > sendDailyReport > Time-driven > Day timer > 12am
+// ── تقرير يومي (Trigger: يومياً الساعة 12 ص) ──
 function sendDailyReport(){
   const ss=SpreadsheetApp.openById(SS_ID);
   const emps=getAll(ss,'موظفون').data||[];
   const sups=getAll(ss,'مشرفون').data||[];
   const log=getAll(ss,'سجل').data||[];
   const today=Utilities.formatDate(new Date(),'Asia/Riyadh','yyyy/MM/dd');
-  const todayV=log.filter(l=>String(l['تاريخ']).includes(today.split('/').slice(0,2).join('/')));
-  const uniq=[...new Set(todayV.map(l=>l['رقم الوظيفي']).filter(Boolean))];
+  const todayV=log.filter(l=>String(l.date||'').includes(today.substr(0,7)));
+  const uniq=[...new Set(todayV.map(l=>l.empId).filter(Boolean))];
   MailApp.sendEmail({
     to:MAIL,
-    subject:'📊 تقرير '+today+' — نظام الورديات',
-    htmlBody:'<div dir="rtl" style="font-family:Tahoma;max-width:500px"><h2 style="color:#1e293b">📊 '+today+'</h2>'+
-      '<table style="border-collapse:collapse;width:100%">'+
-      '<tr style="background:#f1f5f9"><td style="padding:8px">زيارات اليوم</td><td><b>'+todayV.length+'</b></td></tr>'+
-      '<tr><td style="padding:8px">مستخدمون فريدون</td><td><b>'+uniq.length+'</b></td></tr>'+
-      '<tr style="background:#f1f5f9"><td style="padding:8px">إجمالي الموظفين</td><td><b>'+emps.length+'</b></td></tr>'+
-      '<tr><td style="padding:8px">إجمالي المشرفين</td><td><b>'+sups.length+'</b></td></tr>'+
-      '</table><p style="color:#64748b;font-size:12px">المستخدمون: '+uniq.join(', ')+'</p></div>'
+    subject:'تقرير '+today+' — نظام الورديات',
+    htmlBody:'<div dir="rtl" style="font-family:Tahoma;max-width:500px">'+
+      '<h2 style="background:#1e293b;color:#fff;padding:16px;margin:0;border-radius:8px 8px 0 0">'+today+'</h2>'+
+      '<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">'+
+      '<tr style="background:#f8fafc"><td style="padding:10px">زيارات اليوم</td><td style="font-weight:bold">'+todayV.length+'</td></tr>'+
+      '<tr><td style="padding:10px">مستخدمون فريدون</td><td style="font-weight:bold">'+uniq.length+'</td></tr>'+
+      '<tr style="background:#f8fafc"><td style="padding:10px">الموظفون</td><td style="font-weight:bold">'+emps.length+'</td></tr>'+
+      '<tr><td style="padding:10px">المشرفون</td><td style="font-weight:bold">'+sups.length+'</td></tr>'+
+      '</table><p style="color:#64748b;font-size:12px;padding:10px">'+uniq.join(' | ')+'</p></div>'
   });
-}`;
+}
+// ═══ نهاية الكود ═══
+// Triggers > Add > sendDailyReport > Time-driven > Day timer > 12am-1am`
 
 function loadSetup(){
   const url=localStorage.getItem('scriptUrl')||'';
@@ -2129,7 +2248,7 @@ function loadSetup(){
   </div>
   <div class="card">
     <div class="card-hd"><h3>2️⃣ انسخ هذا الكود إلى Apps Script</h3></div>
-    <p style="color:var(--text-l);font-size:.82rem;margin-bottom:8px">في جدول البيانات: Extensions → Apps Script → احذف الكود والصق التالي ثم احفظ</p>
+    <p style="color:var(--text-l);font-size:.82rem;margin-bottom:8px">في جدول البيانات: <strong>Extensions → Apps Script</strong> → احذف الكود القديم والصق الكود التالي ثم احفظ ← <span style="color:var(--warn)">ملاحظة: بعد أي تحديث للكود يجب نشر deployment جديد</span></p>
     <div class="codeblk" id="scriptBox" style="user-select:all">${SCRIPT_CODE.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
     <button class="btn btn-s mt8" onclick="navigator.clipboard.writeText(SCRIPT_CODE).then(()=>toast('✅ تم نسخ الكود'))">📋 نسخ الكود</button>
   </div>
@@ -2248,51 +2367,52 @@ async function exportCSV(sheetName,fname,filterShift=null){
   if(!isAdm()&&CU.role==='sup'){
     const hasShift=data.some(r=>r.shift!==undefined);
     if(hasShift) data=data.filter(r=>r.shift===CU.shift);
-    // للإجازات والإضافي — تصفية بالموظفين في نفس الوردية
     else{
-      const emps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
-      data=data.filter(r=>emps.includes(r.empId));
+      const shiftEmps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+      data=data.filter(r=>shiftEmps.includes(r.empId));
     }
   }
   if(filterShift) data=data.filter(r=>r.shift===filterShift);
   if(!data.length){toast('لا توجد بيانات لوردييتك','err');return;}
 
-  // خريطة الترجمة
+  // خريطة ترجمة الأعمدة
   const CM={id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
     shift:'الوردية',position:'المنصب',region:'المنطقة',center:'المركز',
     vacType:'نوع الإجازة',startDate:'تاريخ البداية',endDate:'تاريخ النهاية',
-    duration:'المدة',center:'مركز الانطلاق',date:'التاريخ',day:'اليوم',
-    hours:'الساعات',notes:'ملاحظات',received:'تم الاستلام',
-    cardType:'نوع البطاقة',expiryDate:'تاريخ الانتهاء',
-    shirt:'قميص CAT2',trouser:'بنطلون CAT2',shoe:'حذاء السيفتي',cat24:'CAT24',
-    car:'رقم السيارة',transferDate:'تاريخ النقل',transferFrom:'نُقل من',
-    annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة'};
+    duration:'المدة (أيام)',date:'التاريخ',day:'اليوم',hours:'الساعات',
+    notes:'ملاحظات',received:'تم الاستلام',cardType:'نوع البطاقة',
+    expiryDate:'تاريخ الانتهاء',shirt:'قميص CAT2',trouser:'بنطلون CAT2',
+    shoe:'حذاء السيفتي',cat24:'CAT24',car:'رقم السيارة',
+    transferDate:'تاريخ النقل',transferFrom:'نُقل من',
+    annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة',role:'الدور'};
 
-  // الأعمدة — استثنِ id للتنظيف
+  // استثنِ عمود id الداخلي
   const keys=Object.keys(data[0]).filter(k=>k!=='id');
   const hdrs=keys.map(k=>CM[k]||k);
 
-  const rows=data.map(row=>
-    keys.map(k=>{
+  // استخدم Tab كفاصل (يعمل بشكل مثالي في Excel)
+  const SEP='\t';
+  const NL='\n';
+  const lines=[hdrs.join(SEP)];
+  data.forEach(row=>{
+    lines.push(keys.map(k=>{
       const v=row[k];
-      if(v===undefined||v===null||v==='') return '""';
-      return '"'+String(v).replace(/"/g,'""')+'"';
-    }).join(',')
-  );
+      if(v===undefined||v===null) return '';
+      // أزل الـ tabs والأسطر الجديدة من القيم
+      return String(v).replace(/\t/g,' ').replace(/\n/g,' ');
+    }).join(SEP));
+  });
 
-  // BOM + headers + rows
-  const csv='\uFEFF'+hdrs.join(',')+'\n'+rows.join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const content='\uFEFF'+lines.join(NL);
+  const blob=new Blob([content],{type:'text/tab-separated-values;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   const d=new Date();
   a.href=url;
-  a.download=fname+'_'+d.getFullYear()+'_'+(d.getMonth()+1)+'_'+d.getDate()+'.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('✅ تم تصدير '+data.length+' سجل');
+  a.download=fname+'_'+d.getFullYear()+'_'+(d.getMonth()+1)+'_'+d.getDate()+'.xls';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('\u2705 تم تصدير '+data.length+' سجل — افتح الملف بـ Excel');
 }
 
 // 11+12. تصدير PDF صحيح — بيانات الموظف الحالي
@@ -2356,37 +2476,37 @@ async function exportShiftCSV(){
   ]);
   const shiftEmps=emps.filter(e=>e.shift===shift);
   if(!shiftEmps.length){toast('لا يوجد موظفون في الوردية','err');return;}
-  const now=new Date();
-  const yr=now.getFullYear();
-  const m=now.getMonth();
+  const now=new Date(),yr=now.getFullYear();
 
-  const rows=shiftEmps.map(e=>{
+  const hdrs=['الاسم','الرقم الوظيفي','الجوال','الوردية','المنطقة','المركز',
+    'المنصب','رصيد سنوية','رصيد مجدولة','إجازات مستخدمة','إضافي السنة','البطاقات'];
+  const SEP='\t', NL='\n';
+  const lines=[hdrs.join(SEP)];
+
+  shiftEmps.forEach(e=>{
     const annQ=parseInt(e.annualQuota)||30, schQ=parseInt(e.schedQuota)||60;
     const av=vacs.filter(v=>v.empId===e.empId);
     const au=av.filter(v=>v.vacType==='annual'||v.vacType.includes('سنوية')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
     const su=av.filter(v=>v.vacType==='sched'||v.vacType.includes('مجدولة')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
     const otYr=ots.filter(o=>o.empId===e.empId&&new Date(o.date).getFullYear()===yr).reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
-    const ec=cards.filter(c=>c.empId===e.empId).map(c=>c.cardType+'('+c.expiryDate+')').join(' | ');
-    return {
-      'الاسم':e.name,'الرقم الوظيفي':e.empId,'الجوال':e.mobile,
-      'الوردية':e.shift,'المنطقة':e.region||'-','المركز':e.center||'-',
-      'المنصب':e.position||'-',
-      'رصيد سنوية':annQ-au+'/'+annQ,
-      'رصيد مجدولة':schQ-su+'/'+schQ,
-      'إضافي السنة':otYr+'س',
-      'البطاقات':ec||'-'
-    };
+    const ec=cards.filter(c=>c.empId===e.empId).map(c=>c.cardType+' ('+c.expiryDate+')').join(' | ');
+    lines.push([
+      e.name, e.empId, e.mobile, e.shift, e.region||'-', e.center||'-',
+      e.position||'-',
+      (annQ-au)+'/'+annQ,
+      (schQ-su)+'/'+schQ,
+      au+su,
+      otYr+'س',
+      ec||'-'
+    ].map(v=>String(v||'').replace(/\t/g,' ').replace(/\n/g,' ')).join(SEP));
   });
 
-  const keys=Object.keys(rows[0]);
-  const nl='\n';
-  const csv='\uFEFF'+keys.join(',') + nl +
-    rows.map(r=>keys.map(k=>'"'+String(r[k]||'').replace(/"/g,'""')+'"').join(',')).join(nl);
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const content='\uFEFF'+lines.join(NL);
+  const blob=new Blob([content],{type:'text/tab-separated-values;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
-  a.download='وردية_'+shift+'_'+yr+'_'+(m+1)+'.csv';
+  a.download='وردية_'+shift+'_'+yr+'_'+(now.getMonth()+1)+'.xls';
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
   toast('✅ تم تصدير وردية '+shift+' — '+shiftEmps.length+' موظف');
