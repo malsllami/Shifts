@@ -399,7 +399,10 @@ tr.new-t{animation:rowhl 4s ease forwards}
       <div id="empsOut"></div>
     </div>
     <div id="page-myshift" class="page">
-      <div class="ph"><h2 id="myShiftTitle">📋 جدول وردييتي</h2></div>
+      <div class="ph">
+      <h2 id="myShiftTitle">📋 جدول وردييتي</h2>
+      <button class="ab ab-emp" onclick="exportShiftCSV()">📊 تصدير CSV</button>
+    </div>
       <div class="filter-bar">
         <select id="ms_m" onchange="buildMyShift()"></select>
         <input id="ms_y" type="number" value="2026" min="2020" max="2040" oninput="buildMyShift()" style="width:80px"/>
@@ -623,7 +626,7 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // القيمة الافتراضية 30 سنوية و60 مجدولة لكن قابلة للتعديل بالمشرف
 async function getEmpBalance(empId){
   const emps=await dbAll('موظفون');
-  const e=emps.find(x=>x.empId===empId)||{};
+  const e=emps.find(x=>x.empId===empId||x.id===empId)||{name:name,empId:empId};
   return {annualQ: parseInt(e.annualQuota)||30, schedQ: parseInt(e.schedQuota)||60};
 }
 async function getVacUsed(empId){
@@ -737,10 +740,22 @@ async function doLogin(){
   }
 }
 
-function launchApp(){
+async function launchApp(){
   $('loginScreen').classList.add('hidden');
   $('mainApp').classList.remove('hidden');
   EMP_MODE=false;
+
+  // ── تحديث بيانات CU من القاعدة (يضمن ظهور البيانات الصحيحة) ──
+  try{
+    const emps = lsGetAll('موظفون');
+    const fresh = emps.find(e=>e.empId===CU.empId);
+    if(fresh){
+      // احتفظ بالـ role
+      const role=CU.role;
+      CU = {...CU, ...fresh, role};
+    }
+  }catch(e){}
+
   applyPerms();
   tickDate();setInterval(tickDate,60000);
   updateAPIBar();
@@ -1021,7 +1036,8 @@ async function loadSupDash(){
 }
 
 async function loadEmpDash(){
-  const now=new Date(),eid=CU.empId,sh=CU.shift;
+  const now=new Date(),eid=CU.empId;
+  let sh=CU.shift||'أ';
 
   // تحميل كل البيانات معاً (سريع)
   const [emps,vacs,myCards,myOT,myCloth,myVeh]=await Promise.all([
@@ -1035,8 +1051,10 @@ async function loadEmpDash(){
 
   // بيانات الموظف المحدّثة من القاعدة
   const meData=emps.find(e=>e.empId===eid)||{};
-  const annualQ=parseInt(meData.annualQuota)||30;
-  const schedQ=parseInt(meData.schedQuota)||60;
+  // تحديث CU بالبيانات الحديثة
+  if(meData.empId){ const r=CU.role; CU={...CU,...meData,role:r}; sh=CU.shift||sh; applyPerms(); }
+  const annualQ=parseInt(meData.annualQuota)||parseInt(CU.annualQuota)||30;
+  const schedQ=parseInt(meData.schedQuota)||parseInt(CU.schedQuota)||60;
 
   // حساب الرصيد
   const annUsed=vacs.filter(v=>v.vacType==='annual'||v.vacType.includes('سنوية')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
@@ -1066,13 +1084,13 @@ async function loadEmpDash(){
   // ── البطاقات الشخصية ──
   h+=`<div class="emp-cards">
     <div class="emp-card"><div class="lbl">👤 الاسم</div><div class="val">${CU.name}</div></div>
-    <div class="emp-card"><div class="lbl">🔢 الرقم الوظيفي</div><div class="val">${CU.empId}</div></div>
+    <div class="emp-card"><div class="lbl">🔢 الرقم الوظيفي</div><div class="val">${meData.empId||CU.empId}</div></div>
     <div class="emp-card" style="border-color:${shColor(sh)}">
       <div class="lbl">🔄 الوردية</div><div class="val">${shBadge(sh)}</div>
       ${!EMP_MODE?'<span class="eico" onclick="editMyShift()">✏️</span>':''}
     </div>
     <div class="emp-card">
-      <div class="lbl">📱 رقم الجوال</div><div class="val" dir="ltr">${CU.mobile}</div>
+      <div class="lbl">📱 رقم الجوال</div><div class="val" dir="ltr">${meData.mobile||CU.mobile}</div>
       ${!EMP_MODE?'<span class="eico" onclick="editMyMobile()">✏️</span>':''}
     </div>
     <div class="emp-card" style="background:var(--cal-${st==='صباح'?'morn':st==='مساء'?'eve':'off'}-bg)">
@@ -1083,7 +1101,8 @@ async function loadEmpDash(){
       <div class="lbl">⏰ إضافي الشهر</div><div class="val" style="color:var(--ok)">${mOTHrs}س</div>
       <div style="font-size:.7rem;color:var(--text-l)">استُلم: ${recvHrs}س | هذا العام: ${otYear}س</div>
     </div>
-    <div class="emp-card"><div class="lbl">🗺️ المنطقة / المركز</div><div class="val">${meData.region||'-'} / ${meData.center||'-'}</div></div>
+    <div class="emp-card"><div class="lbl">🗺️ المنطقة</div><div class="val">${meData.region||CU.region||'-'}</div></div>
+    <div class="emp-card"><div class="lbl">🏢 المركز</div><div class="val">${meData.center||CU.center||'-'}</div></div>
   </div>`;
 
   // ── أزرار ثابتة ──
@@ -1176,28 +1195,51 @@ async function loadEmpDash(){
   $('dashOut').innerHTML=h;
 }
 
-// 7. جدول الوردية المصغر (أسبوع الشهر)
+// 7. جدول دوام الوردية المصغر — تصميم أفضل
 function miniShiftTable(sh, y, m){
   const days=new Date(y,m+1,0).getDate(), now=new Date();
-  let h=`<div class="tbl-wrap"><table>
-    <thead><tr style="background:${shColor(sh)}">
-      ${[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31].slice(0,days).map(d=>{
+  const AR_SHORT_DAYS=['أحد','اثن','ثلا','أرب','خمي','جمع','سبت'];
+  const color=shColor(sh);
+
+  // بناء مجموعات أسبوعية
+  let weeks=[]; let week=[];
+  // ابدأ من أول الشهر
+  const firstDay=new Date(y,m,1).getDay();
+  // فراغات قبل أول يوم
+  for(let i=0;i<firstDay;i++) week.push(null);
+  for(let d=1;d<=days;d++){
+    week.push(d);
+    if(week.length===7){ weeks.push(week); week=[]; }
+  }
+  if(week.length) weeks.push(week);
+
+  let h=`<div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+    <thead>
+      <tr style="background:${color}">
+        ${AR_SHORT_DAYS.map(d=>`<th style="color:#fff;padding:5px 2px;text-align:center;font-size:.72rem;font-weight:700">${d}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${weeks.map(wk=>`<tr>${wk.map(d=>{
+        if(!d) return '<td style="padding:3px"></td>';
         const dt=new Date(y,m,d);
-        return`<th style="min-width:28px;font-size:.65rem">${d}<br>${AR_D[dt.getDay()].slice(0,2)}</th>`;}).join('')}
-    </tr></thead>
-    <tbody><tr>
-      ${[...Array(days)].map((_,i)=>{
-        const d=new Date(y,m,i+1);
-        const st=shiftSt(sh,d);
-        const cls=st==='صباح'?'csm':st==='مساء'?'cse':'cso';
-        const isToday=d.toDateString()===now.toDateString();
-        return`<td style="${isToday?'border:2px solid var(--err);':''}" class="${cls}" title="${st}">${st==='صباح'?'☀':st==='مساء'?'🌙':'😴'}</td>`;}).join('')}
-    </tr></tbody>
+        const st=shiftSt(sh,dt);
+        const isToday=dt.toDateString()===now.toDateString();
+        const bg=st==='صباح'?'var(--cal-morn-bg)':st==='مساء'?'var(--cal-eve-bg)':'var(--cal-off-bg)';
+        const tc=st==='صباح'?'var(--cal-morn-c)':st==='مساء'?'var(--cal-eve-c)':'var(--cal-off-c)';
+        const ico=st==='صباح'?'☀️':st==='مساء'?'🌙':'😴';
+        const border=isToday?`outline:2px solid var(--err);outline-offset:-2px;`:'';
+        return`<td style="padding:4px 2px;text-align:center;background:${bg};color:${tc};${border}border-radius:4px" title="${st}">
+          <div style="font-weight:700;font-size:.78rem">${d}</div>
+          <div style="font-size:.72rem">${ico}</div>
+        </td>`;}).join('')}</tr>`).join('')}
+    </tbody>
   </table></div>
-  <div style="display:flex;gap:10px;margin-top:6px;font-size:.78rem">
-    <span class="csm">☀️ الصباح: 7ص-7م</span>
-    <span class="cse">🌙 المساء: 7م-7ص</span>
-    <span class="cso">😴 أوف</span>
+  <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+    <span class="csm" style="font-size:.78rem">☀️ صباح 7ص-7م</span>
+    <span class="cse" style="font-size:.78rem">🌙 مساء 7م-7ص</span>
+    <span class="cso" style="font-size:.78rem">😴 أوف</span>
   </div>`;
   return h;
 }
@@ -1418,7 +1460,7 @@ async function openEmpViewOnly(empId,name){
   const [emps,vacs,ots,cards,cloth,veh]=await Promise.all([
     dbAll('موظفون'),dbAll('إجازات'),dbAll('اضافي'),dbAll('بطاقات'),dbAll('ملابس'),dbAll('مركبات')
   ]);
-  const e=emps.find(x=>x.empId===empId)||{};
+  const e=emps.find(x=>x.empId===empId||x.id===empId)||{name:name,empId:empId};
   const myV=vacs.filter(v=>v.empId===empId);
   const myO=ots.filter(o=>o.empId===empId);
   const myC=cards.filter(c=>c.empId===empId);
@@ -1963,7 +2005,12 @@ function sheet(ss,n){ return ss.getSheetByName(n)||ss.insertSheet(n); }
 function getAll(ss,name){
   const s=sheet(ss,name), d=s.getDataRange().getValues();
   if(d.length<2) return{ok:1,data:[]};
-  const h=d[0];
+  // حاول قراءة المفاتيح الإنجليزية من ملاحظة الخلية الأولى
+  let h=d[0];
+  try{
+    const note=s.getRange(1,1).getNote();
+    if(note) h=JSON.parse(note);
+  }catch(e){}
   return{ok:1,data:d.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=r[i]);return o;}).filter(r=>r.id!==''&&r.id!==undefined)};
 }
 // خريطة ترجمة الأعمدة إلى عربية
@@ -1996,10 +2043,13 @@ function saveRow(ss,name,row){
   const s=sheet(ss,name);
   let d=s.getDataRange().getValues();
   if(!d.length||!d[0].length){
-    const h=Object.keys(row).map(arKey);
-    const hEn=Object.keys(row);
-    s.getRange(1,1,1,h.length).setValues([h]);
-    s.appendRow(hEn.map(k=>row[k]!==undefined?row[k]:''));
+    // إنشاء الجدول لأول مرة: أسماء عربية في الصف الأول، مفاتيح إنجليزية في الصف الثاني (مخفي)
+    const keysEn=Object.keys(row);
+    const keysAr=keysEn.map(arKey);
+    s.getRange(1,1,1,keysAr.length).setValues([keysAr]);
+    s.appendRow(keysEn.map(k=>row[k]!==undefined?row[k]:''));
+    // حفظ المفاتيح الإنجليزية في ملاحظة الصف الأول (مخفية)
+    s.getRange(1,1).setNote(JSON.stringify(keysEn));
     formatHeader(s);
     return{ok:1};
   }
@@ -2192,30 +2242,57 @@ function addCT(key,inputId,cb){const v=($v(inputId)||'').trim();if(!v)return;con
 function rmCT(key,t,cb){localStorage.setItem(key,JSON.stringify(JSON.parse(localStorage.getItem(key)||'[]').filter(x=>x!==t)));cb();}
 async function exportCSV(sheetName,fname,filterShift=null){
   let data=await dbAll(sheetName);
-  if(!data.length){toast('لا توجد بيانات','err');return;}
-  // المشرف يرى وردييته فقط
-  if(!isAdm()&&CU.role==='sup'&&data[0]?.shift!==undefined){
-    data=data.filter(r=>r.shift===CU.shift);
-  }
-  // فلتر اختياري
-  if(filterShift) data=data.filter(r=>r.shift===filterShift);
+  if(!data.length){toast('لا توجد بيانات للتصدير','err');return;}
 
-  // ترجمة الأعمدة
-  const colMap={id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
+  // المشرف يرى وردييته فقط
+  if(!isAdm()&&CU.role==='sup'){
+    const hasShift=data.some(r=>r.shift!==undefined);
+    if(hasShift) data=data.filter(r=>r.shift===CU.shift);
+    // للإجازات والإضافي — تصفية بالموظفين في نفس الوردية
+    else{
+      const emps=lsGetAll('موظفون').filter(e=>e.shift===CU.shift).map(e=>e.empId);
+      data=data.filter(r=>emps.includes(r.empId));
+    }
+  }
+  if(filterShift) data=data.filter(r=>r.shift===filterShift);
+  if(!data.length){toast('لا توجد بيانات لوردييتك','err');return;}
+
+  // خريطة الترجمة
+  const CM={id:'المعرف',name:'الاسم',empId:'الرقم الوظيفي',mobile:'الجوال',
     shift:'الوردية',position:'المنصب',region:'المنطقة',center:'المركز',
     vacType:'نوع الإجازة',startDate:'تاريخ البداية',endDate:'تاريخ النهاية',
-    duration:'المدة',date:'التاريخ',day:'اليوم',hours:'الساعات',notes:'ملاحظات',
-    received:'تم الاستلام',cardType:'نوع البطاقة',expiryDate:'تاريخ الانتهاء',
-    shirt:'قميص',trouser:'بنطلون',shoe:'حذاء',cat24:'CAT24',car:'السيارة',
+    duration:'المدة',center:'مركز الانطلاق',date:'التاريخ',day:'اليوم',
+    hours:'الساعات',notes:'ملاحظات',received:'تم الاستلام',
+    cardType:'نوع البطاقة',expiryDate:'تاريخ الانتهاء',
+    shirt:'قميص CAT2',trouser:'بنطلون CAT2',shoe:'حذاء السيفتي',cat24:'CAT24',
+    car:'رقم السيارة',transferDate:'تاريخ النقل',transferFrom:'نُقل من',
     annualQuota:'رصيد سنوي',schedQuota:'رصيد مجدولة'};
-  const keys=Object.keys(data[0]).filter(k=>k!=='id'||true);
-  const arHeaders=keys.map(k=>colMap[k]||k);
-  const rows=data.map(e=>keys.map(k=>'"'+String(e[k]!==undefined?e[k]:'').replace(/"/g,'""')+'"').join(','));
-  const csv='\uFEFF'+[arHeaders.join(','),...rows].join('\n');
+
+  // الأعمدة — استثنِ id للتنظيف
+  const keys=Object.keys(data[0]).filter(k=>k!=='id');
+  const hdrs=keys.map(k=>CM[k]||k);
+
+  const rows=data.map(row=>
+    keys.map(k=>{
+      const v=row[k];
+      if(v===undefined||v===null||v==='') return '""';
+      return '"'+String(v).replace(/"/g,'""')+'"';
+    }).join(',')
+  );
+
+  // BOM + headers + rows
+  const csv='\uFEFF'+hdrs.join(',')+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download=fname+'_'+new Date().toLocaleDateString('ar').replace(/\//g,'-')+'.csv';
-  a.click();toast('✅ تم التصدير');
+  const d=new Date();
+  a.href=url;
+  a.download=fname+'_'+d.getFullYear()+'_'+(d.getMonth()+1)+'_'+d.getDate()+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('✅ تم تصدير '+data.length+' سجل');
 }
 
 // 11+12. تصدير PDF صحيح — بيانات الموظف الحالي
@@ -2271,6 +2348,49 @@ ${myO.filter(o=>new Date(o.date).getFullYear()===yr).map(o=>`<tr><td>${o.date}</
   w.document.close();
 }
 
+
+async function exportShiftCSV(){
+  const shift=isAdm()?(localStorage.getItem('viewShift')||CU.shift):CU.shift;
+  const [emps,vacs,ots,cards]=await Promise.all([
+    dbAll('موظفون'),dbAll('إجازات'),dbAll('اضافي'),dbAll('بطاقات')
+  ]);
+  const shiftEmps=emps.filter(e=>e.shift===shift);
+  if(!shiftEmps.length){toast('لا يوجد موظفون في الوردية','err');return;}
+  const now=new Date();
+  const yr=now.getFullYear();
+  const m=now.getMonth();
+
+  const rows=shiftEmps.map(e=>{
+    const annQ=parseInt(e.annualQuota)||30, schQ=parseInt(e.schedQuota)||60;
+    const av=vacs.filter(v=>v.empId===e.empId);
+    const au=av.filter(v=>v.vacType==='annual'||v.vacType.includes('سنوية')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
+    const su=av.filter(v=>v.vacType==='sched'||v.vacType.includes('مجدولة')).reduce((s,v)=>s+(parseInt(v.duration)||0),0);
+    const otYr=ots.filter(o=>o.empId===e.empId&&new Date(o.date).getFullYear()===yr).reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
+    const ec=cards.filter(c=>c.empId===e.empId).map(c=>c.cardType+'('+c.expiryDate+')').join(' | ');
+    return {
+      'الاسم':e.name,'الرقم الوظيفي':e.empId,'الجوال':e.mobile,
+      'الوردية':e.shift,'المنطقة':e.region||'-','المركز':e.center||'-',
+      'المنصب':e.position||'-',
+      'رصيد سنوية':annQ-au+'/'+annQ,
+      'رصيد مجدولة':schQ-su+'/'+schQ,
+      'إضافي السنة':otYr+'س',
+      'البطاقات':ec||'-'
+    };
+  });
+
+  const keys=Object.keys(rows[0]);
+  const nl='\n';
+  const csv='\uFEFF'+keys.join(',') + nl +
+    rows.map(r=>keys.map(k=>'"'+String(r[k]||'').replace(/"/g,'""')+'"').join(',')).join(nl);
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='وردية_'+shift+'_'+yr+'_'+(m+1)+'.csv';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('✅ تم تصدير وردية '+shift+' — '+shiftEmps.length+' موظف');
+}
 /* ══ اختصارات ══ */
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!$('loginScreen').classList.contains('hidden')) doLogin();
