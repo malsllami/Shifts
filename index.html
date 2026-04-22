@@ -345,7 +345,7 @@ tr.new-t{animation:rowhl 4s ease forwards}
     <div class="nav-item emp-nav" data-p="mydata" onclick="go('mydata')"><span class="nav-ico">👤</span>بياناتي</div>
 
     <div class="nav-sec admin-nav">إدارة الموظفين</div>
-    <div class="nav-item admin-nav" data-p="emps" onclick="go('emps')"><span class="nav-ico">👥</span>بيانات الموظفين</div>
+    <div class="nav-item sup-nav" data-p="emps" onclick="go('emps')"><span class="nav-ico">👥</span>بيانات الموظفين</div>
     <div class="nav-item sup-nav" data-p="myshift" onclick="go('myshift')"><span class="nav-ico">📋</span>جدول وردييتي</div>
     <div class="nav-item admin-nav" data-p="allsh" onclick="go('allsh')"><span class="nav-ico">📊</span>جميع الورديات</div>
 
@@ -357,7 +357,7 @@ tr.new-t{animation:rowhl 4s ease forwards}
     <div class="nav-item" data-p="veh" onclick="go('veh')"><span class="nav-ico">🚗</span>المركز والسيارة</div>
 
     <div class="nav-sec">الإعدادات</div>
-    <div class="nav-item admin-nav" data-p="sups" onclick="go('sups')"><span class="nav-ico">🔑</span>إدارة المشرفين</div>
+    <div class="nav-item sup-nav" data-p="sups" onclick="go('sups')"><span class="nav-ico">🔑</span>إدارة المشرفين</div>
     <div class="nav-item admin-nav" data-p="setup" onclick="go('setup')"><span class="nav-ico">🔗</span>ربط Google Sheets</div>
     <div class="nav-item" data-p="cfg" onclick="go('cfg')"><span class="nav-ico">🛠️</span>إعدادات عامة</div>
 
@@ -389,6 +389,7 @@ tr.new-t{animation:rowhl 4s ease forwards}
         <div class="bgroup">
           <button class="ab ab-srch" onclick="openSearch()">🔍 بحث</button>
           <button class="ab ab-emp" onclick="showEmpForm()">➕ موظف جديد</button>
+          <button class="ab ab-export" onclick="exportCSV('موظفون','الموظفين')" style="background:linear-gradient(135deg,#475569,#94a3b8);color:#fff">📊 تصدير</button>
         </div>
       </div>
       <div class="filter-bar">
@@ -1455,16 +1456,29 @@ async function autoFill(qId,nId,eidId,mobId,shId){
   return f;
 }
 
-// قائمة منسدلة لاختيار موظف (للمشرف)
+// قائمة منسدلة لاختيار موظف (للمشرف والمدير)
 async function buildEmpSelect(selectId, defaultEmpId=''){
   const allEmps=await dbAll('موظفون');
   let pool=allEmps;
+  // المشرف يرى وردييته فقط + نفسه
   if(!isAdm()&&isSup()&&!EMP_MODE){
     pool=allEmps.filter(e=>e.shift===CU.shift);
+    // أضف المشرف نفسه إن لم يكن في القائمة
+    if(!pool.find(e=>e.empId===CU.empId)){
+      const meSup={...CU};
+      pool=[meSup,...pool];
+    }
+  }
+  // أضف مشرفي الوردية (المشرف موظف أيضاً)
+  const sups=lsGetAll('مشرفون');
+  if(!isAdm()&&isSup()&&!EMP_MODE){
+    const supEmps=sups.filter(s=>s.shift===CU.shift&&!pool.find(e=>e.empId===s.empId));
+    pool=[...pool,...supEmps];
   }
   const sel=$(selectId); if(!sel)return;
   sel.innerHTML='<option value="">— اختر موظفاً —</option>'+
-    pool.map(e=>`<option value="${e.empId}" ${e.empId===defaultEmpId?'selected':''}>${e.name} (${e.empId})</option>`).join('');
+    pool.map(e=>`<option value="${e.empId}" ${e.empId===defaultEmpId?'selected':''}>${e.name||e.empId} (${e.empId})</option>`).join('');
+  return pool;
 }
 
 function fillFromSelect(selectId,nId,eidId,mobId,shId){
@@ -1474,29 +1488,26 @@ function fillFromSelect(selectId,nId,eidId,mobId,shId){
 // اختيار موظف من القائمة المنسدلة
 async function selEmpFill(selId,nId,eidId,mobId,shId,balId){
   const sel=$(selId); if(!sel)return;
-  // تعبئة فورية من القيمة الحالية
-  const empId=sel.value; if(!empId)return;
   const all=[...lsGetAll('موظفون'),...lsGetAll('مشرفون')];
-  const f=all.find(e=>e.empId===empId);
-  if(!f)return;
-  if(nId)$s(nId,f.name||'');
-  if(eidId)$s(eidId,f.empId||'');
-  if(mobId)$s(mobId,f.mobile||'');
-  if(shId)$s(shId,f.shift||'');
-  if(balId) loadVacBal(balId,empId);
-  // إعادة حساب التقويم إذا وُجد
-  if(typeof calcVacDur==='function') calcVacDur();
-  // ربط حدث التغيير
-  sel.onchange=function(){
-    const f2=all.find(e=>e.empId===this.value);
-    if(!f2)return;
-    if(nId)$s(nId,f2.name||'');
-    if(eidId)$s(eidId,f2.empId||'');
-    if(mobId)$s(mobId,f2.mobile||'');
-    if(shId)$s(shId,f2.shift||'');
-    if(balId) loadVacBal(balId,f2.empId);
-    if(typeof calcVacDur==='function') calcVacDur();
-  };
+
+  // دالة التعبئة المشتركة
+  function doFill(empId){
+    if(!empId)return;
+    const f=all.find(e=>e.empId===empId);
+    if(!f)return;
+    if(nId)$s(nId,f.name||'');
+    if(eidId)$s(eidId,f.empId||'');
+    if(mobId)$s(mobId,f.mobile||'');
+    if(shId)$s(shId,f.shift||'');
+    if(balId) loadVacBal(balId,empId);
+    setTimeout(()=>{if(typeof calcVacDur==='function') calcVacDur();},100);
+  }
+
+  // تعبئة فورية إذا كانت هناك قيمة
+  if(sel.value) doFill(sel.value);
+
+  // ربط حدث التغيير (مرة واحدة)
+  sel.onchange=function(){ doFill(this.value); };
 }
 function prefill(nId,eidId,mobId,shId){
   if(!EMP_MODE&&CU.role!=='emp')return;
@@ -1554,13 +1565,18 @@ function showEmpForm(e=null){
   const nm=e?.name||'', eid=e?.empId||'', mob=e?.mobile||'';
   const pos=e?.position||'', reg=e?.region||CTRS[0], ctr=e?.center||'';
   const sh=e?.shift||SHIFTS[0];
+  // المشرف يضيف فقط لوردييته
+  const supShift=(!isAdm()&&isSup()&&!EMP_MODE)?CU.shift:null;
   const body=
     '<div class="fg"><label>👤 الاسم الكامل *</label><input id="ef_n" value="'+nm.replace(/"/g,"&quot;")+'"/></div>'+
     '<div class="frow">'+
     '<div class="fg"><label>🔢 الرقم الوظيفي *</label><input id="ef_id" value="'+eid+'"/></div>'+
     '<div class="fg"><label>📱 الجوال *</label><input id="ef_m" value="'+mob+'" dir="ltr"/></div>'+
     '</div><div class="frow">'+
-    '<div class="fg"><label>🔄 الوردية *</label><select id="ef_sh">'+SHIFTS.map(s=>'<option'+(sh===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+    (supShift?
+      '<div class="fg"><label>🔄 الوردية</label><input id="ef_sh" value="'+supShift+'" readonly style="background:var(--border-l)"/></div>':
+      '<div class="fg"><label>🔄 الوردية *</label><select id="ef_sh">'+SHIFTS.map(s=>'<option'+(sh===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'
+    )+
     '<div class="fg"><label>💼 المنصب</label><input id="ef_pos" value="'+pos.replace(/"/g,'&quot;')+'"/></div>'+
     '</div><div class="frow">'+
     '<div class="fg"><label>🗺️ المنطقة</label><select id="ef_reg">'+CTRS.map(x=>'<option'+(reg===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'+
@@ -1789,13 +1805,13 @@ function showVacForm(v=null){
   $('vacFormWrap').classList.remove('hidden');
   if(isSup()&&!EMP_MODE){
     buildEmpSelect('vf_sel', v?.empId||'').then(()=>{
-      if(v?.empId) selEmpFill('vf_sel','vf_n','vf_eid','vf_mob','vf_sh','vf_bal');
+      selEmpFill('vf_sel','vf_n','vf_eid','vf_mob','vf_sh','vf_bal');
     });
   } else {
     prefill('vf_n','vf_eid','vf_mob','vf_sh');
     if(CU) loadVacBal('vf_bal',CU.empId);
   }
-  if(v?.startDate) calcVacDur();
+  if(v?.startDate) setTimeout(calcVacDur,200);
 }
 function onVacTypeChg(){$('vf_nw').classList.toggle('hidden',$v('vf_type')!=='__new__');calcVacDur();}
 async function loadVacBal(elId,eid){
@@ -1921,7 +1937,7 @@ function showOTForm(ot=null){
       <button class="btn btn-s" onclick="$('otFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('otFormWrap').classList.remove('hidden');
-  if(isSup()&&!EMP_MODE) buildEmpSelect('of_sel', ot?.empId||'').then(()=>{if(ot?.empId) selEmpFill('of_sel','of_n','of_eid','of_mob','of_sh',null);});
+  if(isSup()&&!EMP_MODE) buildEmpSelect('of_sel', ot?.empId||'').then(()=>selEmpFill('of_sel','of_n','of_eid','of_mob','of_sh',null));
   else prefill('of_n','of_eid','of_mob','of_sh');
 }
 async function saveOT(id){
@@ -1996,7 +2012,7 @@ function showCardForm(c=null){
       <button class="btn btn-s" onclick="$('cardFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('cardFormWrap').classList.remove('hidden');
-  if(isSup()&&!EMP_MODE) buildEmpSelect('cdf_sel', c?.empId||'').then(()=>{if(c?.empId) selEmpFill('cdf_sel','cdf_n','cdf_eid','cdf_mob',null,null);});
+  if(isSup()&&!EMP_MODE) buildEmpSelect('cdf_sel', c?.empId||'').then(()=>selEmpFill('cdf_sel','cdf_n','cdf_eid','cdf_mob',null,null));
   else prefill('cdf_n','cdf_eid','cdf_mob',null);
   if(c?.expiryDate) calcRemain();
 }
@@ -2066,7 +2082,8 @@ function showClothForm(cl=null){
       <button class="btn btn-s" onclick="$('clothFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('clothFormWrap').classList.remove('hidden');
-  prefill('clf_n','clf_eid','clf_mob',null);
+  if(isSup()&&!EMP_MODE) buildEmpSelect('clf_sel', cl?.empId||'').then(()=>selEmpFill('clf_sel','clf_n','clf_eid','clf_mob',null,null));
+  else prefill('clf_n','clf_eid','clf_mob',null);
 }
 async function saveCloth(id){
   const n=$v('clf_n').trim(),eid=$v('clf_eid').trim(),mob=$v('clf_mob').trim();
@@ -2116,7 +2133,8 @@ function showVehForm(v=null){
       <button class="btn btn-s" onclick="$('vehFormWrap').classList.add('hidden')">إلغاء</button>
     </div></div>`;
   $('vehFormWrap').classList.remove('hidden');
-  prefill('vhf_n','vhf_eid','vhf_mob','vhf_sh');
+  if(isSup()&&!EMP_MODE) buildEmpSelect('vhf_sel', v?.empId||'').then(()=>selEmpFill('vhf_sel','vhf_n','vhf_eid','vhf_mob','vhf_sh',null));
+  else prefill('vhf_n','vhf_eid','vhf_mob','vhf_sh');
 }
 async function saveVeh(id){
   const n=$v('vhf_n').trim(),eid=$v('vhf_eid').trim(),mob=$v('vhf_mob').trim(),sh=$v('vhf_sh')||CU?.shift;
@@ -2146,9 +2164,10 @@ function showSupForm(s=null){
     '<div class="fg"><label>🔢 الرقم الوظيفي *</label><input id="sf_id" value="'+eid+'"/></div>'+
     '<div class="fg"><label>📱 الجوال (= كلمة المرور) *</label><input id="sf_m" value="'+mob+'" dir="ltr"/></div>'+
     '</div>'+
-    '<div class="fg"><label>🔄 الوردية</label><select id="sf_sh">'+
-    SHIFTS.map(x=>'<option'+(sh===x?' selected':'')+'>'+x+'</option>').join('')+
-    '</select></div>'+
+    ((!isAdm()&&isSup()&&!EMP_MODE)?
+      '<div class="fg"><label>🔄 الوردية (وردييتك)</label><input id="sf_sh" value="'+CU.shift+'" readonly style="background:var(--border-l)"/></div>':
+      '<div class="fg"><label>🔄 الوردية</label><select id="sf_sh">'+SHIFTS.map(x=>'<option'+(sh===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
+    )+
     '<div id="sf_m2"></div>'+
     '<div class="bgroup mt12">'+
     '<button class="btn btn-p" onclick="saveSup()">💾 حفظ</button>'+
@@ -2164,7 +2183,9 @@ async function saveSup(id){
   const allSups=await dbAll('مشرفون');
   const dupSup=allSups.find(s=>s.empId===eid&&s.id!==id);
   if(dupSup){showMsg('sf_m2','err','⚠️ الرقم الوظيفي '+eid+' مسجّل بالفعل للمشرف: '+dupSup.name);return;}
-  const supRow={id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,role:'sup'};
+  // المشرف يضيف للوردييته فقط
+  const finalShift=(!isAdm()&&isSup()&&!EMP_MODE)?CU.shift:sh;
+  const supRow={id:id||uid(),name:n,empId:eid,mobile:m,shift:finalShift,role:'sup'};
   await dbSave('مشرفون',supRow);
 
   // ── المشرف يكون موظفاً أيضاً في جدول الموظفين ──
@@ -2191,8 +2212,10 @@ async function saveSup(id){
   closeModal();loadSups();toast('✅ تم الحفظ والمزامنة');
 }
 async function loadSups(){
-  const recs=await dbAll('مشرفون');
-  if(!recs.length){$('supsOut').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا يوجد مشرفون</div>';return;}
+  let recs=await dbAll('مشرفون');
+  // المشرف يرى فقط مشرفي وردييته
+  if(!isAdm()&&isSup()&&!EMP_MODE) recs=recs.filter(r=>r.shift===CU.shift);
+  if(!recs.length){$('supsOut').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا يوجد مشرفون في وردييتك</div>';return;}
   $('supsOut').innerHTML=`<div class="tbl-wrap"><table>
     <thead><tr><th>الاسم</th><th>الوظيفي</th><th>الجوال</th><th>الوردية</th><th>إجراءات</th></tr></thead>
     <tbody>${recs.map(r=>`<tr>
