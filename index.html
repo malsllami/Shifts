@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة الورديات</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   المتغيرات - عدّل الألوان هنا فقط
+   ============================================================ */
+:root {
+  --primary:#1a3a5c; --primary-l:#2563a8; --primary-d:#0f2340;
+  --accent:#e8a020; --accent-l:#f5c060;
+  --bg:#f0f4f8; --card:#ffffff; --text:#1a2533; --text-l:#5a6a7a;
+  --border:#d0dce8; --border-l:#e8eff6;
+  --ok:#16a34a; --err:#dc2626; --warn:#d97706; --info:#0891b2;
+  --shift-a:#2563eb; --shift-b:#16a34a; --shift-c:#d97706; --shift-d:#9333ea;
+  --morning-bg:rgba(251,191,36,.18); --morning-c:#92400e;
+  --evening-bg:rgba(30,64,175,.1);  --evening-c:#1e40af;
+  --off-bg:#f3f4f6; --off-c:#9ca3af;
+  --sidebar:250px; --topbar:60px; --r:10px;
+  --sh:0 2px 12px rgba(0,0,0,.08); --sh-lg:0 8px 30px rgba(0,0,0,.14);
+  --new-row:#fff9db;
+}
+[data-theme="dark"]{
+  --bg:#0f1923; --card:#1a2535; --text:#e2eaf4; --text-l:#8fa3b8;
+  --border:#2a3d52; --border-l:#1e3045;
+  --primary:#2563a8; --primary-d:#1a3a5c;
+  --morning-bg:rgba(251,191,36,.12); --evening-bg:rgba(30,64,175,.15);
+  --off-bg:#1e2d3d; --off-c:#6b7280;
+  --new-row:#2a2a00;
+}
+
+/* ============================================================
+   قاعدة
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);transition:background .3s,color .3s}
+
+/* ============================================================
+   شاشة الدخول
+   ============================================================ */
+#loginScreen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--primary-d) 0%,var(--primary) 55%,var(--primary-l) 100%);
+  padding:20px;
+}
+.login-wrap{display:flex;flex-direction:column;align-items:center;width:100%;max-width:420px}
+.login-logo{text-align:center;color:#fff;margin-bottom:36px}
+.logo-spin{font-size:56px;display:block;animation:spin 12s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.login-logo h1{font-size:1.9rem;font-weight:900;margin:10px 0 6px}
+.login-logo p{opacity:.7;font-size:.95rem}
+.login-box{background:var(--card);border-radius:16px;padding:36px;width:100%;box-shadow:var(--sh-lg)}
+.login-box h2{font-size:1.1rem;font-weight:700;color:var(--primary);margin-bottom:24px;text-align:center}
+
+/* ============================================================
+   شريط علوي
+   ============================================================ */
+.topbar{
+  position:fixed;top:0;right:0;left:0;height:var(--topbar);
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;z-index:200;box-shadow:0 2px 10px rgba(0,0,0,.25);
+}
+.topbar-r{display:flex;align-items:center;gap:12px}
+.topbar-l{display:flex;align-items:center;gap:14px;font-size:.82rem}
+.brand{font-size:1.05rem;font-weight:800;letter-spacing:-.3px}
+.menu-btn{background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;padding:4px 8px;line-height:1}
+.topbar-user{background:rgba(255,255,255,.12);padding:5px 12px;border-radius:20px;font-size:.82rem}
+.topbar-date{opacity:.8;font-size:.78rem}
+
+/* زر الوضع الداكن */
+.theme-btn{
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:20px;padding:5px 12px;cursor:pointer;
+  font-family:'Tajawal';font-size:.82rem;transition:background .2s;
+}
+.theme-btn:hover{background:rgba(255,255,255,.2)}
+.logout-btn{
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);
+  color:#fff;border-radius:8px;padding:6px 16px;cursor:pointer;
+  font-family:'Tajawal';font-size:.85rem;transition:background .2s;
+}
+.logout-btn:hover{background:rgba(255,255,255,.22)}
+
+/* ============================================================
+   تخطيط
+   ============================================================ */
+.app-layout{display:flex;margin-top:var(--topbar);min-height:calc(100vh - var(--topbar))}
+
+/* ============================================================
+   الشريط الجانبي
+   ============================================================ */
+.sidebar{
+  width:var(--sidebar);background:var(--primary-d);color:#fff;
+  flex-shrink:0;overflow-y:auto;padding:14px 0;
+  transition:transform .3s;
+}
+.nav-sec{font-size:.68rem;letter-spacing:1px;color:rgba(255,255,255,.35);
+  padding:16px 18px 5px;font-weight:700;text-transform:uppercase}
+.nav-list{list-style:none}
+.nav-a{
+  display:flex;align-items:center;gap:9px;padding:9px 18px;
+  color:rgba(255,255,255,.72);text-decoration:none;
+  font-size:.88rem;border-right:3px solid transparent;
+  transition:all .18s;cursor:pointer;
+}
+.nav-a:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-a.active{background:rgba(255,255,255,.11);color:#fff;border-right-color:var(--accent)}
+.nav-ico{font-size:.95rem;flex-shrink:0}
+
+/* ============================================================
+   المحتوى
+   ============================================================ */
+.main{flex:1;padding:22px;overflow-y:auto;min-width:0}
+.page{display:none}
+.page.on{display:block}
+.ph{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:22px;padding-bottom:14px;border-bottom:2px solid var(--border)}
+.ph h2{font-size:1.4rem;font-weight:800;color:var(--primary)}
+[data-theme="dark"] .ph h2{color:#7ab3e0}
+
+/* ============================================================
+   بطاقات وشبكات
+   ============================================================ */
+.card{background:var(--card);border-radius:var(--r);padding:20px;box-shadow:var(--sh);margin-bottom:16px}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.stat{background:var(--card);border-radius:var(--r);padding:18px;box-shadow:var(--sh);text-align:center;border-top:4px solid transparent}
+.stat-n{font-size:2rem;font-weight:900;line-height:1.1;margin-bottom:4px}
+.stat-l{font-size:.8rem;color:var(--text-l)}
+
+/* ============================================================
+   نماذج
+   ============================================================ */
+.fg{margin-bottom:14px}
+.fg label{display:block;margin-bottom:5px;font-weight:600;font-size:.88rem;color:var(--text-l)}
+.fg input,.fg select,.fg textarea{
+  width:100%;padding:9px 13px;
+  border:1.5px solid var(--border);border-radius:8px;
+  font-family:'Tajawal';font-size:.92rem;
+  background:var(--card);color:var(--text);
+  transition:border-color .2s,box-shadow .2s;
+}
+.fg input:focus,.fg select:focus,.fg textarea:focus{
+  outline:none;border-color:var(--primary-l);
+  box-shadow:0 0 0 3px rgba(37,99,168,.12);
+}
+.fg input[readonly]{background:var(--bg);color:var(--text-l);cursor:default}
+.frow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.frow .fg{flex:1;min-width:140px}
+.form-card{background:var(--card);border-radius:var(--r);padding:22px;box-shadow:var(--sh);margin-bottom:20px}
+
+/* ============================================================
+   أزرار
+   ============================================================ */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 22px;border-radius:8px;border:none;
+  font-family:'Tajawal';font-size:.92rem;font-weight:600;
+  cursor:pointer;transition:all .18s;
+}
+.btn-p{background:var(--primary);color:#fff}.btn-p:hover{background:var(--primary-l);transform:translateY(-1px)}
+.btn-s{background:var(--bg);color:var(--text);border:1.5px solid var(--border)}.btn-s:hover{background:var(--border)}
+.btn-d{background:var(--err);color:#fff}.btn-d:hover{filter:brightness(1.1)}
+.btn-e{background:var(--info);color:#fff}.btn-e:hover{filter:brightness(1.1)}
+.btn-w{background:var(--warn);color:#fff}.btn-w:hover{filter:brightness(1.1)}
+.btn-sm{padding:5px 12px;font-size:.8rem;border-radius:6px}
+.bgroup{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ============================================================
+   جداول
+   ============================================================ */
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
+table{width:100%;border-collapse:collapse;background:var(--card);font-size:.87rem}
+th{background:var(--primary);color:#fff;padding:11px 9px;text-align:center;font-weight:600;white-space:nowrap}
+td{padding:9px;text-align:center;border-bottom:1px solid var(--border-l);vertical-align:middle}
+[data-theme="dark"] td{border-bottom-color:#1e3045}
+tr:hover td{background:rgba(37,99,168,.04)}
+tr:last-child td{border-bottom:none}
+tr.new-transfer td{background:var(--new-row)!important;animation:flashRow 1s ease}
+@keyframes flashRow{0%,100%{background:var(--new-row)}50%{background:rgba(255,220,0,.35)}}
+
+/* ============================================================
+   شارات
+   ============================================================ */
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700}
+.b-a{background:rgba(37,99,235,.12);color:var(--shift-a)}
+.b-b{background:rgba(22,163,74,.12);color:var(--shift-b)}
+.b-c{background:rgba(217,119,6,.12);color:var(--shift-c)}
+.b-d{background:rgba(147,51,234,.12);color:var(--shift-d)}
+.b-morn{background:var(--morning-bg);color:var(--morning-c)}
+.b-eve{background:var(--evening-bg);color:var(--evening-c)}
+.b-off{background:var(--off-bg);color:var(--off-c)}
+.b-ok{background:rgba(22,163,74,.12);color:var(--ok)}
+.b-err{background:rgba(220,38,38,.12);color:var(--err)}
+.b-warn{background:rgba(217,119,6,.12);color:var(--warn)}
+.b-info{background:rgba(8,145,178,.12);color:var(--info)}
+
+/* ============================================================
+   تقويم
+   ============================================================ */
+.shift-cell{padding:2px 7px;border-radius:4px;font-size:.75rem;font-weight:700;white-space:nowrap}
+.sm{background:var(--morning-bg);color:var(--morning-c)}
+.se{background:var(--evening-bg);color:var(--evening-c)}
+.so{background:var(--off-bg);color:var(--off-c)}
+.summary-row td{background:var(--bg)!important;font-weight:700}
+
+/* تقويم مصغر */
+.mini-cal{background:var(--bg);border-radius:8px;padding:12px;border:1.5px solid var(--border);margin-top:10px}
+.mcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.mcal-h{font-size:.68rem;font-weight:700;color:var(--text-l);padding:2px}
+.mcal-d{font-size:.7rem;padding:3px 1px;border-radius:3px}
+.mc-sm{background:var(--morning-bg)}
+.mc-se{background:var(--evening-bg)}
+.mc-so{background:var(--off-bg)}
+.mc-vac{outline:2px solid #ef4444;outline-offset:-2px}
+
+/* ============================================================
+   بطاقات الموظف (صفحة الموظف الشخصية)
+   ============================================================ */
+.emp-profile{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:20px}
+.emp-card{background:var(--card);border-radius:var(--r);padding:22px;box-shadow:var(--sh);position:relative;overflow:hidden}
+.emp-card::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%}
+.emp-card.shift-a::before{background:var(--shift-a)}
+.emp-card.shift-b::before{background:var(--shift-b)}
+.emp-card.shift-c::before{background:var(--shift-c)}
+.emp-card.shift-d::before{background:var(--shift-d)}
+.emp-card h4{font-size:.78rem;color:var(--text-l);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.emp-card .val{font-size:1.3rem;font-weight:800}
+.emp-card .edit-link{font-size:.78rem;color:var(--primary-l);cursor:pointer;text-decoration:underline;margin-top:6px;display:inline-block}
+
+/* ============================================================
+   مودال
+   ============================================================ */
+.modal{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center}
+.modal-ov{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+.modal-box{position:relative;background:var(--card);border-radius:14px;width:90%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:var(--sh-lg)}
+.modal-hd{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+.modal-hd h3{font-size:1.05rem;font-weight:700}
+.modal-cl{background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-l);line-height:1}
+.modal-bd{padding:22px}
+
+/* ============================================================
+   رسائل وإشعارات
+   ============================================================ */
+.msg-err{color:var(--err);background:rgba(220,38,38,.08);padding:9px 13px;border-radius:8px;margin-top:10px;font-size:.88rem}
+.msg-ok{color:var(--ok);background:rgba(22,163,74,.08);padding:9px 13px;border-radius:8px;margin-top:10px;font-size:.88rem}
+.msg-info{color:var(--info);background:rgba(8,145,178,.08);padding:9px 13px;border-radius:8px;margin-top:10px;font-size:.88rem}
+
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  padding:12px 28px;border-radius:30px;color:#fff;
+  font-family:'Tajawal';font-size:.92rem;font-weight:600;
+  box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;
+  animation:fadeUp .3s ease;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}}
+
+/* ============================================================
+   فلتر وبحث
+   ============================================================ */
+.filter-bar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.filter-bar select,.filter-bar input{
+  padding:7px 11px;border:1.5px solid var(--border);border-radius:8px;
+  font-family:'Tajawal';font-size:.88rem;background:var(--card);color:var(--text);
+}
+
+/* انتهاء صلاحية */
+.exp-red{color:var(--err);font-weight:700}
+.exp-warn{color:var(--warn);font-weight:600}
+.exp-ok{color:var(--ok)}
+
+/* كود */
+.code-blk{
+  background:#1a2535;color:#7dd3fc;padding:14px;border-radius:8px;
+  font-family:monospace;font-size:.82rem;overflow-x:auto;
+  margin:10px 0;direction:ltr;text-align:left;line-height:1.7;
+  max-height:220px;overflow-y:auto;
+}
+
+/* مساعدات */
+.hidden{display:none!important}
+.mt12{margin-top:12px}.mt16{margin-top:16px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}
+.tc{text-align:center}
+
+/* ============================================================
+   جوال
+   ============================================================ */
+@media(max-width:768px){
+  .sidebar{position:fixed;right:0;top:var(--topbar);bottom:0;z-index:150;transform:translateX(110%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{padding:14px}
+  .frow{flex-direction:column}
+  .grid-4{grid-template-columns:1fr 1fr}
+  .topbar-date{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ==================== شاشة الدخول ==================== -->
+<div id="loginScreen">
+  <div class="login-wrap">
+    <div class="login-logo">
+      <span class="logo-spin">⚙</span>
+      <h1>نظام إدارة الورديات</h1>
+      <p>إدارة متكاملة للموارد البشرية</p>
+    </div>
+    <div class="login-box">
+      <h2>تسجيل الدخول</h2>
+      <div class="fg">
+        <label>الرقم الوظيفي</label>
+        <input id="li_id" type="text" placeholder="أدخل رقمك الوظيفي" />
+      </div>
+      <div class="fg">
+        <label>كلمة المرور (رقم الجوال)</label>
+        <input id="li_pw" type="password" placeholder="أدخل رقم جوالك" />
+      </div>
+      <button class="btn btn-p" style="width:100%;margin-top:6px" onclick="doLogin()">دخول</button>
+      <div id="li_err"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== التطبيق الرئيسي ==================== -->
+<div id="mainApp" class="hidden">
+
+  <header class="topbar">
+    <div class="topbar-r">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <span class="brand">⚙ نظام الورديات</span>
+    </div>
+    <div class="topbar-l">
+      <span id="tb_user" class="topbar-user"></span>
+      <span id="tb_date" class="topbar-date"></span>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 داكن</button>
+      <button class="logout-btn" onclick="doLogout()">خروج ↩</button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <nav id="sidebar" class="sidebar">
+      <div class="nav-sec">الرئيسية</div>
+      <ul class="nav-list">
+        <li><span class="nav-a active" data-p="dash" onclick="go('dash')"><span class="nav-ico">🏠</span>لوحة التحكم</span></li>
+        <li><span class="nav-a" data-p="cal" onclick="go('cal')"><span class="nav-ico">📅</span>جدول الورديات</span></li>
+        <li id="navMyData" class="sup-hide"><span class="nav-a" data-p="mydata" onclick="go('mydata')"><span class="nav-ico">👤</span>بياناتي</span></li>
+      </ul>
+      <div class="nav-sec sup-only">إدارة الموظفين</div>
+      <ul class="nav-list sup-only">
+        <li><span class="nav-a" data-p="emps" onclick="go('emps')"><span class="nav-ico">👥</span>بيانات الموظفين</span></li>
+        <li><span class="nav-a" data-p="shifttbl" onclick="go('shifttbl')"><span class="nav-ico">📋</span>جدول الوردية</span></li>
+      </ul>
+      <div class="nav-sec">النماذج</div>
+      <ul class="nav-list">
+        <li><span class="nav-a" data-p="vac" onclick="go('vac')"><span class="nav-ico">🏖</span>الإجازات</span></li>
+        <li><span class="nav-a" data-p="ot" onclick="go('ot')"><span class="nav-ico">⏰</span>العمل الإضافي</span></li>
+        <li><span class="nav-a" data-p="cards" onclick="go('cards')"><span class="nav-ico">💳</span>البطاقات</span></li>
+        <li><span class="nav-a" data-p="cloth" onclick="go('cloth')"><span class="nav-ico">👕</span>مقاسات الملابس</span></li>
+        <li><span class="nav-a" data-p="veh" onclick="go('veh')"><span class="nav-ico">🚗</span>المركز والسيارة</span></li>
+      </ul>
+      <div class="nav-sec sup-only">الإعدادات</div>
+      <ul class="nav-list sup-only">
+        <li><span class="nav-a" data-p="sups" onclick="go('sups')"><span class="nav-ico">🔑</span>إدارة المشرفين</span></li>
+        <li><span class="nav-a" data-p="setup" onclick="go('setup')"><span class="nav-ico">⚙</span>ربط قاعدة البيانات</span></li>
+        <li><span class="nav-a" data-p="cfg" onclick="go('cfg')"><span class="nav-ico">🛠</span>إعدادات عامة</span></li>
+      </ul>
+    </nav>
+
+    <main class="main">
+
+      <!-- لوحة التحكم -->
+      <div id="page-dash" class="page on">
+        <div class="ph"><h2>لوحة التحكم</h2></div>
+        <div id="dashContent"></div>
+      </div>
+
+      <!-- جدول الورديات العام -->
+      <div id="page-cal" class="page">
+        <div class="ph"><h2>📅 جدول دوام الورديات</h2></div>
+        <div class="card">
+          <div class="frow" style="align-items:flex-end">
+            <div class="fg"><label>الشهر</label><select id="cal_m"></select></div>
+            <div class="fg"><label>السنة</label><input id="cal_y" type="number" value="2026" min="2020" max="2040"/></div>
+            <button class="btn btn-p" onclick="buildCal()">عرض ▶</button>
+          </div>
+        </div>
+        <div id="calOut"></div>
+      </div>
+
+      <!-- بياناتي (موظف) -->
+      <div id="page-mydata" class="page">
+        <div class="ph"><h2>👤 بياناتي</h2></div>
+        <div id="myDataContent"></div>
+      </div>
+
+      <!-- بيانات الموظفين -->
+      <div id="page-emps" class="page">
+        <div class="ph">
+          <h2>👥 بيانات الموظفين</h2>
+          <button class="btn btn-p" onclick="showEmpForm()">➕ إضافة موظف</button>
+        </div>
+        <div class="filter-bar">
+          <select id="f_shift" onchange="renderEmps()">
+            <option value="">كل الورديات</option>
+            <option>أ</option><option>ب</option><option>ج</option><option>د</option>
+          </select>
+          <input id="f_q" placeholder="🔍 بحث بالاسم أو الرقم..." oninput="renderEmps()" style="min-width:200px"/>
+        </div>
+        <div id="empsOut"></div>
+      </div>
+
+      <!-- جدول الوردية -->
+      <div id="page-shifttbl" class="page">
+        <div class="ph"><h2>📋 جدول الوردية الكامل</h2></div>
+        <div class="filter-bar">
+          <select id="st_shift" onchange="buildShiftTbl()">
+            <option>أ</option><option>ب</option><option>ج</option><option>د</option>
+          </select>
+          <select id="st_m" onchange="buildShiftTbl()"></select>
+          <input id="st_y" type="number" value="2026" min="2020" max="2040" oninput="buildShiftTbl()" style="width:90px"/>
+        </div>
+        <div id="shiftTblOut"></div>
+      </div>
+
+      <!-- الإجازات -->
+      <div id="page-vac" class="page">
+        <div class="ph">
+          <h2>🏖 الإجازات</h2>
+          <button class="btn btn-p" onclick="showVacForm()">➕ إجازة جديدة</button>
+        </div>
+        <div id="vacFormWrap" class="hidden"></div>
+        <div id="vacList"></div>
+      </div>
+
+      <!-- العمل الإضافي -->
+      <div id="page-ot" class="page">
+        <div class="ph">
+          <h2>⏰ العمل الإضافي</h2>
+          <button class="btn btn-p" onclick="showOTForm()">➕ إضافة</button>
+        </div>
+        <div id="otFormWrap" class="hidden"></div>
+        <div id="otList"></div>
+      </div>
+
+      <!-- البطاقات -->
+      <div id="page-cards" class="page">
+        <div class="ph">
+          <h2>💳 تواريخ البطاقات</h2>
+          <button class="btn btn-p" onclick="showCardForm()">➕ إضافة</button>
+        </div>
+        <div id="cardFormWrap" class="hidden"></div>
+        <div id="cardList"></div>
+      </div>
+
+      <!-- الملابس -->
+      <div id="page-cloth" class="page">
+        <div class="ph">
+          <h2>👕 مقاسات الملابس</h2>
+          <button class="btn btn-p" onclick="showClothForm()">➕ إضافة</button>
+        </div>
+        <div id="clothFormWrap" class="hidden"></div>
+        <div id="clothList"></div>
+      </div>
+
+      <!-- المركز والسيارة -->
+      <div id="page-veh" class="page">
+        <div class="ph">
+          <h2>🚗 المركز والسيارة</h2>
+          <button class="btn btn-p" onclick="showVehForm()">➕ إضافة</button>
+        </div>
+        <div id="vehFormWrap" class="hidden"></div>
+        <div id="vehList"></div>
+      </div>
+
+      <!-- إدارة المشرفين -->
+      <div id="page-sups" class="page">
+        <div class="ph">
+          <h2>🔑 إدارة المشرفين</h2>
+          <button class="btn btn-p" onclick="showSupForm()">➕ إضافة مشرف</button>
+        </div>
+        <div id="supsOut"></div>
+      </div>
+
+      <!-- ربط قاعدة البيانات -->
+      <div id="page-setup" class="page">
+        <div class="ph"><h2>⚙ ربط قاعدة البيانات</h2></div>
+        <div id="setupOut"></div>
+      </div>
+
+      <!-- إعدادات عامة -->
+      <div id="page-cfg" class="page">
+        <div class="ph"><h2>🛠 إعدادات عامة</h2></div>
+        <div id="cfgOut"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- مودال عام -->
+<div id="modal" class="modal hidden">
+  <div class="modal-ov" onclick="closeModal()"></div>
+  <div class="modal-box">
+    <div class="modal-hd">
+      <h3 id="modal_t"></h3>
+      <button class="modal-cl" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal_b" class="modal-bd"></div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+/* ============================================================
+   ⚙  الإعدادات — عدّل هنا فقط عند الحاجة
+   ============================================================ */
+const SCRIPT_URL = localStorage.getItem('scriptUrl') || '';
+const SHEET_ID   = '1nH-sSKeYtnJQHOckgKlBqpts5jK8uXOAEsa579cyZqU';
+
+const SHEETS = {
+  EMP:'موظفون', SUP:'مشرفون', VAC:'إجازات',
+  OT:'اضافي',  CARD:'بطاقات', CLOTH:'ملابس', VEH:'مركبات'
+};
+
+/* دورة الورديات 8 أيام: 2 صباح ، 2 مساء ، 4 أوف */
+const CYCLE = ['صباح','صباح','مساء','مساء','أوف','أوف','أوف','أوف'];
+
+/* مرجع 22/4/2026:
+   ج = ثاني يوم صباح  → offset 1
+   د = ثاني يوم مساء  → offset 3
+   أ = ثاني يوم أوف   → offset 5
+   ب = آخر  يوم أوف  → offset 7        */
+const REF_DATE = new Date(2026,3,22);
+const OFFSETS  = {'ج':1,'د':3,'أ':5,'ب':7};
+const SHIFTS   = ['أ','ب','ج','د'];
+
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                   'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const AR_DAYS   = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+const AR_SHORT  = ['أحد','اثن','ثلا','أرب','خمي','جمع','سبت'];
+
+const VAC_TYPES_DEFAULT  = ['النظام','مجدولة','مرضية','مولود','زواج','وفاة','دورة عمل','اختبارات'];
+const CARD_TYPES_DEFAULT = ['بطاقة عمل','بطاقة مصدر'];
+const CENTERS    = ['شمال','وسط','جنوب','شرق','غرب'];
+const SHIRT_SZ   = ['XS','S','M','L','XL','XXL','XXXL'];
+const TROUSER_SZ = ['28','30','32','34','36','38','40','42','44','46'];
+const SHOE_SZ    = ['38','39','40','41','42','43','44','45','46'];
+
+/* ============================================================
+   قاعدة البيانات (localStorage بانتظار Apps Script)
+   ============================================================ */
+async function dbCall(action,data={}){
+  const url = localStorage.getItem('scriptUrl')||'';
+  if(url){
+    try{
+      const p = new URLSearchParams({action,...Object.fromEntries(
+        Object.entries(data).map(([k,v])=>[k,typeof v==='object'?JSON.stringify(v):v])
+      )});
+      const r = await fetch(`${url}?${p}`);
+      return await r.json();
+    }catch(e){}
+  }
+  return localDB(action,data);
+}
+function localDB(action,data){
+  const key='hr_'+(data.sheet||'x');
+  if(action==='getAll'){
+    return {ok:1,data:JSON.parse(localStorage.getItem(key)||'[]')};
+  }
+  if(action==='save'){
+    let rows=JSON.parse(localStorage.getItem(key)||'[]');
+    const i=rows.findIndex(r=>r.id===data.row.id);
+    i>=0?rows[i]=data.row:rows.push(data.row);
+    localStorage.setItem(key,JSON.stringify(rows));
+    return {ok:1};
+  }
+  if(action==='del'){
+    let rows=JSON.parse(localStorage.getItem(key)||'[]');
+    localStorage.setItem(key,JSON.stringify(rows.filter(r=>r.id!==data.id)));
+    return {ok:1};
+  }
+  return {ok:0};
+}
+async function dbAll(sheet){ return (await dbCall('getAll',{sheet})).data||[]; }
+async function dbSave(sheet,row){ if(!row.id)row.id=uid(); return dbCall('save',{sheet,row}); }
+async function dbDel(sheet,id){ return dbCall('del',{sheet,id}); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   مساعدات التاريخ والورديات
+   ============================================================ */
+function shiftStatus(shift,date){
+  const diff = Math.floor((date-REF_DATE)/86400000);
+  const idx  = ((diff + OFFSETS[shift])%8+8)%8;
+  return CYCLE[idx];
+}
+function daysDiff(a,b){ return Math.floor((new Date(b)-new Date(a))/86400000); }
+function fmtDate(s){ if(!s)return''; const d=new Date(s); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`; }
+function arDay(d){ return AR_DAYS[new Date(d).getDay()]; }
+
+/* تقويم هجري تقريبي */
+function toHijri(date){
+  const jd=Math.floor(date.getTime()/86400000+2440587.5);
+  const l=jd-1948440+10632,n=Math.floor((l-1)/10631);
+  const l2=l-10631*n+354,j=Math.floor((10985-l2)/5316)*Math.floor(50*l2/17719)+Math.floor(l2/5670)*Math.floor(43*l2/15238);
+  const l3=l2-Math.floor((30-j)/15)*Math.floor(17719*j/50)-Math.floor(j/16)*Math.floor(15238*j/43)+29;
+  const m=Math.floor(24*l3/709),d=l3-Math.floor(709*m/24);
+  const y=30*n+j-30;
+  return {y,m,d};
+}
+const H_MONTHS=['محرم','صفر','ربيع الأول','ربيع الثاني','جمادى الأولى','جمادى الثانية','رجب','شعبان','رمضان','شوال','ذو القعدة','ذو الحجة'];
+function fmtHijri(d){ try{const h=toHijri(d);return`${h.d} ${H_MONTHS[h.m-1]} ${h.y}`;}catch{return'';} }
+
+/* ============================================================
+   المصادقة
+   ============================================================ */
+let CU=null; // current user
+
+async function doLogin(){
+  const id = $('li_id').value.trim();
+  const pw = $('li_pw').value.trim();
+  $('li_err').innerHTML='';
+  if(!id||!pw){ showErr('li_err','أدخل الرقم الوظيفي وكلمة المرور'); return; }
+
+  /* مشرفون */
+  const sups = await dbAll(SHEETS.SUP);
+  let u = sups.find(s=>(s.empId===id)&&(s.mobile===pw||s.password===pw));
+  if(u){ CU={...u,role:'sup'}; launchApp(); return; }
+
+  /* موظفون — كلمة المرور = رقم الجوال */
+  const emps = await dbAll(SHEETS.EMP);
+  u = emps.find(e=>e.empId===id && e.mobile===pw);
+  if(u){ CU={...u,role:'emp'}; launchApp(); return; }
+
+  /* دخول مدير افتراضي إذا فارغة */
+  if(sups.length===0&&emps.length===0&&id==='admin'&&pw==='admin123'){
+    CU={name:'المدير',empId:'admin',mobile:'0000000000',shift:'أ',role:'sup'};
+    launchApp(); return;
+  }
+
+  showErr('li_err','بيانات الدخول غير صحيحة');
+}
+
+function launchApp(){
+  $('loginScreen').classList.add('hidden');
+  $('mainApp').classList.remove('hidden');
+  const isSup = CU.role==='sup';
+  /* إظهار / إخفاء عناصر المشرف */
+  document.querySelectorAll('.sup-only').forEach(el=>el.style.display=isSup?'':'none');
+  /* بيانات في شريط الدخول */
+  if(isSup){
+    document.querySelector('#navMyData').style.display='none';
+  } else {
+    document.querySelector('#navMyData').style.display='';
+  }
+  $('tb_user').textContent=`${CU.name} | ${isSup?'مشرف':'موظف'} | وردية ${CU.shift||''}`;
+  tickDate();
+  setInterval(tickDate,30000);
+  initCalSel();
+  initStSel();
+  go('dash');
+}
+
+function doLogout(){
+  CU=null;
+  $('mainApp').classList.add('hidden');
+  $('loginScreen').classList.remove('hidden');
+  $('li_id').value='';$('li_pw').value='';
+}
+
+function isSup(){ return CU&&CU.role==='sup'; }
+function canEdit(empId){ return isSup()||(CU&&CU.empId===empId); }
+
+/* ============================================================
+   ناف + صفحات
+   ============================================================ */
+function go(p){
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('on'));
+  document.querySelectorAll('.nav-a').forEach(el=>el.classList.remove('active'));
+  const pg=$('page-'+p); if(pg)pg.classList.add('on');
+  const lnk=document.querySelector(`[data-p="${p}"]`); if(lnk)lnk.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');
+  const fns={
+    dash:loadDash, cal:()=>buildCal(), mydata:loadMyData,
+    emps:renderEmps, shifttbl:buildShiftTbl,
+    vac:loadVacList, ot:loadOTList, cards:loadCardList,
+    cloth:loadClothList, veh:loadVehList,
+    sups:loadSups, setup:loadSetup, cfg:loadCfg
+  };
+  if(fns[p]) fns[p]();
+}
+
+function toggleSidebar(){ $('sidebar').classList.toggle('open'); }
+
+/* ============================================================
+   وضع داكن / فاتح
+   ============================================================ */
+function toggleTheme(){
+  const d=document.documentElement;
+  const dark=d.getAttribute('data-theme')==='dark';
+  d.setAttribute('data-theme',dark?'light':'dark');
+  $('themeBtn').textContent=dark?'🌙 داكن':'☀ فاتح';
+  localStorage.setItem('theme',dark?'light':'dark');
+}
+/* تطبيق الثيم المحفوظ */
+(function(){
+  const t=localStorage.getItem('theme')||'light';
+  document.documentElement.setAttribute('data-theme',t);
+  document.addEventListener('DOMContentLoaded',()=>{
+    const btn=$('themeBtn');
+    if(btn) btn.textContent=t==='dark'?'☀ فاتح':'🌙 داكن';
+  });
+})();
+
+/* ============================================================
+   مساعدات DOM
+   ============================================================ */
+function $(id){ return document.getElementById(id); }
+function showErr(id,msg){ $(id).innerHTML=`<div class="msg-err">${msg}</div>`; }
+function showOk(id,msg){ $(id).innerHTML=`<div class="msg-ok">${msg}</div>`; }
+function showInfo(id,msg){ $(id).innerHTML=`<div class="msg-info">${msg}</div>`; }
+function toast(msg,type='ok'){
+  const el=document.createElement('div');
+  el.id='toast';
+  el.style.background=type==='ok'?'var(--ok)':type==='err'?'var(--err)':'var(--info)';
+  el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+function openModal(title,html){
+  $('modal_t').textContent=title;
+  $('modal_b').innerHTML=html;
+  $('modal').classList.remove('hidden');
+}
+function closeModal(){ $('modal').classList.add('hidden'); }
+
+/* تاريخ الشريط */
+function tickDate(){
+  const n=new Date();
+  $('tb_date').textContent=`${AR_DAYS[n.getDay()]} ${n.getDate()}/${n.getMonth()+1}/${n.getFullYear()} | ${fmtHijri(n)}`;
+}
+
+/* شارة وردية */
+function shiftBadge(s){
+  const cls={أ:'b-a',ب:'b-b',ج:'b-c',د:'b-d'}[s]||'';
+  return `<span class="badge ${cls}">وردية ${s}</span>`;
+}
+
+/* ============================================================
+   لوحة التحكم
+   ============================================================ */
+async function loadDash(){
+  const now=new Date();
+  let html='';
+
+  if(isSup()){
+    const emps=await dbAll(SHEETS.EMP);
+    const cards=await dbAll(SHEETS.CARD);
+    const expiring=cards.filter(c=>{ const d=daysDiff(now,c.expiryDate); return d>=0&&d<=60; });
+    html+=`<div class="grid-4">
+      <div class="stat" style="border-color:var(--primary)">
+        <div class="stat-n" style="color:var(--primary)">${emps.length}</div>
+        <div class="stat-l">إجمالي الموظفين</div>
+      </div>
+      ${SHIFTS.map(s=>{
+        const cnt=emps.filter(e=>e.shift===s).length;
+        const clr=['var(--shift-a)','var(--shift-b)','var(--shift-c)','var(--shift-d)'][SHIFTS.indexOf(s)];
+        const st=shiftStatus(s,now);
+        return`<div class="stat" style="border-color:${clr}">
+          <div class="stat-n" style="color:${clr}">${cnt}</div>
+          <div class="stat-l">وردية ${s}</div>
+          <span class="shift-cell ${st==='صباح'?'sm':st==='مساء'?'se':'so'}">${st==='صباح'?'☀ صباح':st==='مساء'?'🌙 مساء':'أوف'}</span>
+        </div>`;
+      }).join('')}
+      <div class="stat" style="border-color:var(--err)">
+        <div class="stat-n" style="color:var(--err)">${expiring.length}</div>
+        <div class="stat-l">بطاقات تنتهي قريباً</div>
+      </div>
+    </div>`;
+    if(expiring.length){
+      html+=`<div class="card" style="border-right:4px solid var(--err)">
+        <h3 style="color:var(--err);margin-bottom:12px">⚠ بطاقات تنتهي خلال 60 يوماً</h3>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>الموظف</th><th>نوع البطاقة</th><th>الانتهاء</th><th>المتبقي</th></tr></thead><tbody>
+          ${expiring.map(c=>{const d=daysDiff(now,c.expiryDate);return`<tr><td>${c.name}</td><td>${c.cardType}</td><td>${fmtDate(c.expiryDate)}</td>
+            <td class="${d<=30?'exp-red':'exp-warn'}">${d} يوم</td></tr>`;}).join('')}
+          </tbody></table></div></div>`;
+    }
+  } else {
+    const st=shiftStatus(CU.shift,now);
+    const myVacs=(await dbAll(SHEETS.VAC)).filter(v=>v.empId===CU.empId);
+    const myCards=(await dbAll(SHEETS.CARD)).filter(c=>c.empId===CU.empId);
+    const expCards=myCards.filter(c=>{ const d=daysDiff(now,c.expiryDate); return d>=0&&d<=60; });
+    html+=`<div class="grid-4">
+      <div class="stat" style="border-color:var(--primary)">
+        <div class="stat-n">${st==='صباح'?'☀':st==='مساء'?'🌙':'😴'}</div>
+        <div class="stat-l">حالة وردية ${CU.shift} اليوم</div>
+        <span class="shift-cell ${st==='صباح'?'sm':st==='مساء'?'se':'so'} mt12">${st}</span>
+      </div>
+      <div class="stat" style="border-color:var(--info)">
+        <div class="stat-n" style="color:var(--info)">${myVacs.length}</div>
+        <div class="stat-l">إجمالي إجازاتي</div>
+      </div>
+      <div class="stat" style="border-color:var(--err)">
+        <div class="stat-n" style="color:var(--err)">${expCards.length}</div>
+        <div class="stat-l">بطاقات تنتهي قريباً</div>
+      </div>
+    </div>`;
+  }
+
+  html+=`<div class="card"><h3 style="margin-bottom:14px">📅 تقويم ${AR_MONTHS[now.getMonth()]} ${now.getFullYear()}</h3>
+    ${calHTML(now.getFullYear(),now.getMonth())}</div>`;
+  $('dashContent').innerHTML=html;
+}
+
+/* ============================================================
+   بياناتي (الموظف)
+   ============================================================ */
+async function loadMyData(){
+  if(!CU)return;
+  const now=new Date();
+  const st=shiftStatus(CU.shift,now);
+  const stCls=st==='صباح'?'sm':st==='مساء'?'se':'so';
+  const stLabel=st==='صباح'?'☀ صباح':st==='مساء'?'🌙 مساء':'😴 أوف';
+  const shCls={أ:'shift-a',ب:'shift-b',ج:'shift-c',د:'shift-d'}[CU.shift]||'';
+
+  const myVacs  =(await dbAll(SHEETS.VAC)).filter(v=>v.empId===CU.empId);
+  const myCards =(await dbAll(SHEETS.CARD)).filter(c=>c.empId===CU.empId);
+  const myOT    =(await dbAll(SHEETS.OT)).filter(o=>o.empId===CU.empId);
+  const myCloth =(await dbAll(SHEETS.CLOTH)).filter(c=>c.empId===CU.empId)[0];
+  const myVeh   =(await dbAll(SHEETS.VEH)).filter(v=>v.empId===CU.empId)[0];
+
+  const expCards=myCards.filter(c=>daysDiff(now,c.expiryDate)<=60&&daysDiff(now,c.expiryDate)>=0);
+  const thisMonthOT=myOT.filter(o=>{const d=new Date(o.date);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  const totalOTHours=thisMonthOT.reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
+
+  let html=`<div class="emp-profile">
+    <div class="emp-card">
+      <h4>الاسم الكامل</h4>
+      <div class="val">${CU.name}</div>
+    </div>
+    <div class="emp-card">
+      <h4>الرقم الوظيفي</h4>
+      <div class="val">${CU.empId}</div>
+    </div>
+    <div class="emp-card ${shCls}">
+      <h4>الوردية</h4>
+      <div class="val">${shiftBadge(CU.shift)}</div>
+      <span class="edit-link" onclick="editMyShift()">✏ تعديل الوردية</span>
+    </div>
+    <div class="emp-card">
+      <h4>رقم الجوال</h4>
+      <div class="val" dir="ltr">${CU.mobile}</div>
+      <span class="edit-link" onclick="editMyMobile()">✏ تعديل الجوال</span>
+    </div>
+    <div class="emp-card">
+      <h4>حالة اليوم</h4>
+      <span class="shift-cell ${stCls}" style="font-size:1.1rem;padding:6px 14px">${stLabel}</span>
+    </div>
+    <div class="emp-card">
+      <h4>إضافي هذا الشهر</h4>
+      <div class="val" style="color:var(--ok)">${totalOTHours} ساعة</div>
+    </div>
+  </div>`;
+
+  /* بطاقات منتهية */
+  if(expCards.length){
+    html+=`<div class="card" style="border-right:4px solid var(--err);margin-bottom:16px">
+      <h4 style="color:var(--err);margin-bottom:10px">⚠ بطاقات تنتهي قريباً</h4>
+      ${expCards.map(c=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span>${c.cardType}</span>
+        <span class="exp-red">${daysDiff(now,c.expiryDate)} يوم متبقي</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  /* آخر إجازاتي */
+  if(myVacs.length){
+    html+=`<div class="card mb12"><h4 style="margin-bottom:10px">🏖 آخر إجازاتي</h4>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>النوع</th><th>من</th><th>إلى</th><th>المدة</th></tr></thead><tbody>
+        ${myVacs.slice(-5).reverse().map(v=>`<tr>
+          <td><span class="badge b-warn">${v.vacType}</span></td>
+          <td>${fmtDate(v.startDate)}</td><td>${fmtDate(v.endDate)}</td>
+          <td>${v.duration} يوم</td></tr>`).join('')}
+        </tbody></table></div></div>`;
+  }
+
+  /* مقاساتي */
+  if(myCloth){
+    html+=`<div class="card mb12"><h4 style="margin-bottom:10px">👕 مقاسات ملابسي</h4>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <span>قميص CAT2: <strong>${myCloth.shirt||'-'}</strong></span>
+        <span>بنطلون CAT2: <strong>${myCloth.trouser||'-'}</strong></span>
+        <span>سيفتي شوز: <strong>${myCloth.shoe||'-'}</strong></span>
+        <span>CAT24: <strong>${myCloth.cat24||'-'}</strong></span>
+      </div></div>`;
+  }
+
+  $('myDataContent').innerHTML=html;
+}
+
+/* تعديل الوردية */
+function editMyShift(){
+  openModal('تعديل الوردية',`
+    <div class="fg"><label>اختر الوردية الجديدة</label>
+      <select id="ed_shift">
+        ${SHIFTS.map(s=>`<option value="${s}" ${CU.shift===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div id="ed_m"></div>
+    <div class="bgroup mt16">
+      <button class="btn btn-p" onclick="saveMyShift()">حفظ</button>
+      <button class="btn btn-s" onclick="closeModal()">إلغاء</button>
+    </div>`);
+}
+async function saveMyShift(){
+  const ns=$('ed_shift').value;
+  if(ns===CU.shift){showInfo('ed_m','الوردية لم تتغير');return;}
+  const emps=await dbAll(SHEETS.EMP);
+  const me=emps.find(e=>e.id===CU.id||e.empId===CU.empId);
+  if(!me){showErr('ed_m','لم يتم العثور على بياناتك');return;}
+  const oldShift=me.shift;
+  me.shift=ns;
+  me.transferDate=new Date().toISOString().split('T')[0];
+  me.transferFrom=oldShift;
+  await dbSave(SHEETS.EMP,me);
+  CU.shift=ns;
+  closeModal();
+  toast(`تم نقل وردية ${CU.name} من وردية ${oldShift} إلى وردية ${ns}`);
+  loadMyData();
+}
+
+/* تعديل الجوال */
+function editMyMobile(){
+  openModal('تعديل رقم الجوال',`
+    <div class="fg"><label>رقم الجوال الجديد</label>
+      <input id="ed_mob" type="text" value="${CU.mobile}" dir="ltr"/>
+    </div>
+    <p style="font-size:.82rem;color:var(--text-l);margin-top:4px">⚠ رقم الجوال هو كلمة المرور للدخول</p>
+    <div id="ed_mm"></div>
+    <div class="bgroup mt16">
+      <button class="btn btn-p" onclick="saveMyMobile()">حفظ</button>
+      <button class="btn btn-s" onclick="closeModal()">إلغاء</button>
+    </div>`);
+}
+async function saveMyMobile(){
+  const nm=$('ed_mob').value.trim();
+  if(!nm||nm.length<10){showErr('ed_mm','رقم جوال غير صحيح');return;}
+  const emps=await dbAll(SHEETS.EMP);
+  const me=emps.find(e=>e.empId===CU.empId);
+  if(!me){showErr('ed_mm','لم يتم العثور على بياناتك');return;}
+  me.mobile=nm;
+  await dbSave(SHEETS.EMP,me);
+  CU.mobile=nm;
+  closeModal();
+  toast('تم تحديث رقم الجوال');
+  loadMyData();
+}
+
+/* ============================================================
+   التقويم
+   ============================================================ */
+function initCalSel(){
+  const sel=$('cal_m'); if(!sel||sel.options.length)return;
+  AR_MONTHS.forEach((m,i)=>{ const o=document.createElement('option');o.value=i;o.textContent=m;sel.appendChild(o); });
+  sel.value=new Date().getMonth();
+}
+function buildCal(){
+  const m=parseInt($('cal_m').value), y=parseInt($('cal_y').value);
+  $('calOut').innerHTML=calHTML(y,m);
+}
+function calHTML(y,m){
+  const days=new Date(y,m+1,0).getDate();
+  const stats={};
+  SHIFTS.forEach(s=>stats[s]={صباح:0,مساء:0,أوف:0});
+
+  let rows='';
+  for(let d=1;d<=days;d++){
+    const dt=new Date(y,m,d);
+    const fri=dt.getDay()===5;
+    rows+=`<tr${fri?' style="background:rgba(255,200,0,.05)"':''}>
+      <td><strong>${d}</strong></td>
+      <td>${AR_SHORT[dt.getDay()]}</td>
+      <td style="font-size:.72rem;color:var(--text-l)">${fmtHijri(dt)}</td>
+      ${SHIFTS.map(s=>{
+        const st=shiftStatus(s,dt); stats[s][st]++;
+        const cls=st==='صباح'?'sm':st==='مساء'?'se':'so';
+        const lbl=st==='صباح'?'☀ صباح':st==='مساء'?'🌙 مساء':'أوف';
+        return`<td><span class="shift-cell ${cls}">${lbl}</span></td>`;
+      }).join('')}
+    </tr>`;
+  }
+
+  const sumRow=`<tr class="summary-row">
+    <td colspan="3"><strong>المجموع</strong></td>
+    ${SHIFTS.map(s=>`<td style="font-size:.75rem">
+      <span class="shift-cell sm">☀${stats[s]['صباح']}</span>
+      <span class="shift-cell se">🌙${stats[s]['مساء']}</span>
+      <span class="shift-cell so">أوف${stats[s]['أوف']}</span>
+    </td>`).join('')}
+  </tr>`;
+
+  return`<div class="card">
+    <h3 style="margin-bottom:12px">${AR_MONTHS[m]} ${y} | ${fmtHijri(new Date(y,m,1))}</h3>
+    <div class="tbl-wrap"><table class="cal-tbl">
+      <thead><tr><th>اليوم</th><th>الأسبوع</th><th>هجري</th>
+        ${SHIFTS.map(s=>`<th>وردية ${s}</th>`).join('')}</tr></thead>
+      <tbody>${rows}${sumRow}</tbody>
+    </table></div>
+    <div class="tbl-wrap mt12"><table style="width:auto">
+      <thead><tr><th>الوردية</th><th>صباح</th><th>مساء</th><th>أوف</th><th>إجمالي دوام</th></tr></thead>
+      <tbody>${SHIFTS.map(s=>`<tr>
+        <td>${shiftBadge(s)}</td>
+        <td>${stats[s]['صباح']}</td><td>${stats[s]['مساء']}</td><td>${stats[s]['أوف']}</td>
+        <td><strong>${stats[s]['صباح']+stats[s]['مساء']}</strong></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+/* تقويم مصغر لنموذج الإجازة */
+function miniCalHTML(shift,startDate,endDate){
+  if(!shift||!startDate||!endDate)return'';
+  const s=new Date(startDate),e=new Date(endDate);
+  if(s>e)return'';
+  let html=`<div class="mini-cal"><p style="font-size:.82rem;font-weight:700;margin-bottom:8px">📅 دوام وردية ${shift} خلال الإجازة</p>
+    <div class="mcal-grid">${AR_SHORT.map(d=>`<div class="mcal-h">${d}</div>`).join('')}`;
+  let sh=0,off=0,d=new Date(s);
+  const sw=s.getDay();
+  for(let i=0;i<sw;i++) html+='<div></div>';
+  while(d<=e){
+    const st=shiftStatus(shift,d);
+    const cls=st==='صباح'?'mc-sm':st==='مساء'?'mc-se':'mc-so';
+    if(st!=='أوف')sh++; else off++;
+    html+=`<div class="mcal-d ${cls} mc-vac" title="${st}">${d.getDate()}</div>`;
+    d.setDate(d.getDate()+1);
+  }
+  html+=`</div><div style="margin-top:8px;font-size:.78rem;display:flex;gap:14px">
+    <span><span class="shift-cell sm">☀</span> دوام: <strong>${sh}</strong></span>
+    <span><span class="shift-cell so">أوف</span> أوف: <strong>${off}</strong></span>
+  </div></div>`;
+  return html;
+}
+
+/* ============================================================
+   بيانات الموظفين (مشرف)
+   ============================================================ */
+async function renderEmps(){
+  const shift=$('f_shift').value, q=($('f_q').value||'').toLowerCase();
+  let emps=await dbAll(SHEETS.EMP);
+  if(shift) emps=emps.filter(e=>e.shift===shift);
+  if(q) emps=emps.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.empId||'').includes(q)||(e.mobile||'').includes(q));
+  if(!emps.length){
+    $('empsOut').innerHTML='<div class="card tc" style="padding:40px;color:var(--text-l)">لا توجد بيانات</div>';return;
+  }
+  $('empsOut').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>الاسم</th><th>الرقم الوظيفي</th><th>الجوال</th><th>الوردية</th><th>المنصب</th><th>إجراءات</th></tr></thead>
+    <tbody>${emps.map((e,i)=>`<tr>
+      <td>${i+1}</td><td><strong>${e.name}</strong></td><td>${e.empId}</td>
+      <td dir="ltr">${e.mobile}</td><td>${shiftBadge(e.shift)}</td><td>${e.position||'-'}</td>
+      <td><div class="bgroup">
+        <button class="btn btn-e btn-sm" onclick='openEmpEdit(${JSON.stringify(e)})'>تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.EMP}','${e.id}',renderEmps)">حذف</button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function showEmpForm(e=null){
+  openModal(e?'تعديل موظف':'إضافة موظف',`
+    <div class="fg"><label>الاسم الكامل *</label><input id="ef_n" value="${e?.name||''}"/></div>
+    <div class="frow">
+      <div class="fg"><label>الرقم الوظيفي *</label><input id="ef_id" value="${e?.empId||''}"/></div>
+      <div class="fg"><label>رقم الجوال (= كلمة المرور) *</label><input id="ef_m" value="${e?.mobile||''}" dir="ltr"/></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>الوردية *</label><select id="ef_sh">
+        ${SHIFTS.map(s=>`<option ${e?.shift===s?'selected':''}>${s}</option>`).join('')}
+      </select></div>
+      <div class="fg"><label>المنصب</label><input id="ef_pos" value="${e?.position||''}"/></div>
+    </div>
+    <div id="ef_msg"></div>
+    <div class="bgroup mt16">
+      <button class="btn btn-p" onclick="saveEmp('${e?.id||''}')">حفظ</button>
+      <button class="btn btn-s" onclick="closeModal()">إلغاء</button>
+    </div>`);
+}
+function openEmpEdit(e){ showEmpForm(e); }
+
+async function saveEmp(id){
+  const n=$('ef_n').value.trim(),eid=$('ef_id').value.trim(),
+        m=$('ef_m').value.trim(),sh=$('ef_sh').value,pos=$('ef_pos').value.trim();
+  if(!n||!eid||!m||!sh){showErr('ef_msg','ملء الحقول المطلوبة *');return;}
+
+  const existing = id ? (await dbAll(SHEETS.EMP)).find(e=>e.id===id) : null;
+  const oldShift = existing?.shift;
+
+  const row={id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,position:pos};
+
+  /* إذا تغيرت الوردية → تسجيل تاريخ النقل */
+  if(oldShift && oldShift!==sh){
+    row.transferDate=new Date().toISOString().split('T')[0];
+    row.transferFrom=oldShift;
+  }
+
+  await dbSave(SHEETS.EMP,row);
+  closeModal(); renderEmps();
+  if(oldShift&&oldShift!==sh) toast(`تم نقل ${n} من وردية ${oldShift} إلى وردية ${sh}`,'info');
+  else toast('تم الحفظ');
+}
+
+/* ============================================================
+   جدول الوردية الكامل (مشرف)
+   ============================================================ */
+function initStSel(){
+  const sel=$('st_m'); if(!sel||sel.options.length)return;
+  AR_MONTHS.forEach((mn,i)=>{const o=document.createElement('option');o.value=i;o.textContent=mn;sel.appendChild(o);});
+  sel.value=new Date().getMonth();
+}
+async function buildShiftTbl(){
+  const shift=$('st_shift').value,
+        m=parseInt($('st_m').value),
+        y=parseInt($('st_y').value);
+  const now=new Date();
+  const emps=(await dbAll(SHEETS.EMP)).filter(e=>e.shift===shift);
+  const vacs=await dbAll(SHEETS.VAC);
+  const ots=await dbAll(SHEETS.OT);
+  const cards=await dbAll(SHEETS.CARD);
+
+  if(!emps.length){$('shiftTblOut').innerHTML='<div class="card tc" style="padding:30px">لا يوجد موظفون في هذه الوردية</div>';return;}
+
+  const ONE_WEEK=7*24*60*60*1000;
+
+  let rows=emps.map(e=>{
+    const mVacs=vacs.filter(v=>v.empId===e.empId&&new Date(v.startDate).getMonth()===m&&new Date(v.startDate).getFullYear()===y);
+    const mOT=ots.filter(o=>o.empId===e.empId&&new Date(o.date).getMonth()===m&&new Date(o.date).getFullYear()===y);
+    const eCards=cards.filter(c=>c.empId===e.empId);
+    const expCard=eCards.filter(c=>daysDiff(now,c.expiryDate)<=60&&daysDiff(now,c.expiryDate)>=0);
+    const vacDays=mVacs.reduce((s,v)=>s+(parseInt(v.duration)||0),0);
+    const otHrs=mOT.reduce((s,o)=>s+(parseFloat(o.hours)||0),0);
+
+    /* تلوين صف النقل لمدة أسبوع */
+    const isNew=e.transferDate&&(now-new Date(e.transferDate))<ONE_WEEK;
+
+    return`<tr class="${isNew?'new-transfer':''}">
+      <td><strong>${e.name}</strong>${isNew?`<br><span class="badge b-warn" style="font-size:.7rem">نُقل من وردية ${e.transferFrom}</span>`:''}</td>
+      <td>${e.empId}</td><td dir="ltr">${e.mobile}</td>
+      <td>${vacDays>0?`<span class="badge b-warn">${vacDays}يوم</span>`:'-'}</td>
+      <td>${otHrs>0?`<span class="badge b-ok">${otHrs}س</span>`:'-'}</td>
+      <td>${expCard.length?`<span class="badge b-err">${expCard.length} بطاقة</span>`:'-'}</td>
+      <td><div class="bgroup">
+        <button class="btn btn-e btn-sm" onclick='openEmpEdit(${JSON.stringify(e)})'>تعديل</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  $('shiftTblOut').innerHTML=`<div class="card">
+    <h3 style="margin-bottom:14px">وردية ${shift} | ${AR_MONTHS[m]} ${y} | <span class="badge ${['b-a','b-b','b-c','b-d'][SHIFTS.indexOf(shift)]}">${emps.length} موظف</span></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>الاسم</th><th>الوظيفي</th><th>الجوال</th><th>إجازات الشهر</th><th>إضافي الشهر</th><th>بطاقات منتهية</th><th>إجراء</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ============================================================
+   نموذج عام للمستخدم (موظف أو مشرف)
+   تعبئة تلقائية من الرقم الوظيفي أو الجوال
+   ============================================================ */
+async function autoFill(qId,nId,eidId,mobId,shId){
+  const q=$(qId).value.trim();
+  if(q.length<3)return;
+  const emps=await dbAll(SHEETS.EMP);
+  const sups=await dbAll(SHEETS.SUP);
+  const all=[...emps,...sups];
+  const found=all.find(e=>e.empId===q||e.mobile===q);
+  if(found){
+    if(nId&&$(nId))$(nId).value=found.name||'';
+    if(eidId&&$(eidId))$(eidId).value=found.empId||'';
+    if(mobId&&$(mobId))$(mobId).value=found.mobile||'';
+    if(shId&&$(shId))$(shId).value=found.shift||'';
+  }
+}
+function prefill(nId,eidId,mobId,shId){
+  if(!isSup()&&CU){
+    if(nId&&$(nId))$(nId).value=CU.name||'';
+    if(eidId&&$(eidId))$(eidId).value=CU.empId||'';
+    if(mobId&&$(mobId))$(mobId).value=CU.mobile||'';
+    if(shId&&$(shId))$(shId).value=CU.shift||'';
+  }
+}
+
+/* ============================================================
+   الإجازات
+   ============================================================ */
+function showVacForm(v=null){
+  const customTypes=JSON.parse(localStorage.getItem('customVacTypes')||'[]');
+  const allTypes=[...VAC_TYPES_DEFAULT,...customTypes];
+  $('vacFormWrap').innerHTML=`
+    <div class="form-card">
+      <h3 style="margin-bottom:16px">${v?'تعديل إجازة':'إضافة إجازة جديدة'}</h3>
+      ${isSup()?`<div class="fg"><label>بحث بالرقم الوظيفي أو الجوال</label>
+        <input id="vf_q" placeholder="ابحث للتعبئة التلقائية" oninput="autoFill('vf_q','vf_n','vf_eid','vf_mob','vf_sh')"/></div>`:''}
+      <div class="frow">
+        <div class="fg"><label>الاسم</label><input id="vf_n" value="${v?.name||''}" readonly/></div>
+        <div class="fg"><label>الرقم الوظيفي</label><input id="vf_eid" value="${v?.empId||''}" readonly/></div>
+        <div class="fg"><label>الجوال</label><input id="vf_mob" value="${v?.mobile||''}" readonly dir="ltr"/></div>
+      </div>
+      <input type="hidden" id="vf_sh" value="${v?.shift||''}"/>
+      <div class="frow">
+        <div class="fg"><label>نوع الإجازة *</label>
+          <select id="vf_type" onchange="onVacTypeChange()">
+            ${allTypes.map(t=>`<option ${v?.vacType===t?'selected':''}>${t}</option>`).join('')}
+            <option value="__new__">+ نوع جديد</option>
+          </select></div>
+        <div class="fg hidden" id="vf_newWrap"><label>اسم النوع الجديد</label><input id="vf_newType"/></div>
+      </div>
+      <div class="fg"><label>مركز الانطلاق</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">
+          ${CENTERS.map(c=>`<label style="cursor:pointer;display:flex;align-items:center;gap:5px">
+            <input type="radio" name="vf_ctr" value="${c}" ${v?.center===c?'checked':''}/>${c}
+          </label>`).join('')}
+        </div></div>
+      <div class="frow">
+        <div class="fg"><label>تاريخ البداية *</label><input type="date" id="vf_s" value="${v?.startDate||''}" onchange="calcVacDur()"/></div>
+        <div class="fg"><label>تاريخ النهاية *</label><input type="date" id="vf_e" value="${v?.endDate||''}" onchange="calcVacDur()"/></div>
+        <div class="fg"><label>المدة (أيام)</label><input id="vf_dur" readonly style="background:var(--bg)" value="${v?.duration||''}"/></div>
+      </div>
+      <div id="vf_miniCal"></div>
+      <div id="vf_msg"></div>
+      <div class="bgroup mt16">
+        <button class="btn btn-p" onclick="saveVac('${v?.id||''}')">💾 حفظ</button>
+        <button class="btn btn-s" onclick="hideVacForm()">إلغاء</button>
+      </div>
+    </div>`;
+  $('vacFormWrap').classList.remove('hidden');
+  prefill('vf_n','vf_eid','vf_mob','vf_sh');
+  if(v?.startDate) calcVacDur();
+}
+function hideVacForm(){ $('vacFormWrap').classList.add('hidden'); }
+function onVacTypeChange(){ $('vf_newWrap').classList.toggle('hidden',$('vf_type').value!=='__new__'); }
+function calcVacDur(){
+  const s=$('vf_s').value,e=$('vf_e').value;
+  if(!s||!e)return;
+  const d=daysDiff(s,e)+1;
+  $('vf_dur').value=d>0?d:'';
+  const sh=$('vf_sh').value||CU?.shift;
+  if(sh) $('vf_miniCal').innerHTML=miniCalHTML(sh,s,e);
+}
+async function saveVac(id){
+  let type=$('vf_type').value;
+  if(type==='__new__'){
+    const nt=($('vf_newType').value||'').trim();
+    if(!nt){showErr('vf_msg','أدخل اسم النوع');return;}
+    type=nt;
+    const c=JSON.parse(localStorage.getItem('customVacTypes')||'[]');
+    if(!c.includes(nt)){c.push(nt);localStorage.setItem('customVacTypes',JSON.stringify(c));}
+  }
+  const n=$('vf_n').value.trim(),eid=$('vf_eid').value.trim(),
+        mob=$('vf_mob').value.trim(),sh=$('vf_sh').value||CU?.shift,
+        ctr=document.querySelector('input[name="vf_ctr"]:checked')?.value||'',
+        s=$('vf_s').value,e=$('vf_e').value,dur=$('vf_dur').value;
+  if(!n||!eid||!s||!e){showErr('vf_msg','الرجاء ملء الحقول المطلوبة');return;}
+  await dbSave(SHEETS.VAC,{id:id||uid(),name:n,empId:eid,mobile:mob,shift:sh,vacType:type,center:ctr,startDate:s,endDate:e,duration:dur});
+  hideVacForm(); loadVacList(); toast('تم حفظ الإجازة');
+}
+async function loadVacList(){
+  let recs=await dbAll(SHEETS.VAC);
+  if(!isSup()) recs=recs.filter(r=>r.empId===CU?.empId);
+  if(!recs.length){$('vacList').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا توجد إجازات</div>';return;}
+  $('vacList').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>النوع</th><th>المركز</th><th>من</th><th>إلى</th><th>المدة</th><th>الوردية</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr>
+      <td>${r.name}</td><td>${r.empId}</td>
+      <td><span class="badge b-warn">${r.vacType}</span></td>
+      <td>${r.center||'-'}</td><td>${fmtDate(r.startDate)}</td><td>${fmtDate(r.endDate)}</td>
+      <td>${r.duration} يوم</td><td>${r.shift?shiftBadge(r.shift):'-'}</td>
+      <td><div class="bgroup">
+        ${canEdit(r.empId)?`<button class="btn btn-e btn-sm" onclick="editVac('${r.id}')">تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.VAC}','${r.id}',loadVacList)">حذف</button>`:''}
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function editVac(id){
+  const recs=await dbAll(SHEETS.VAC);
+  const r=recs.find(x=>x.id===id);
+  if(r)showVacForm(r);
+}
+
+/* ============================================================
+   العمل الإضافي
+   ============================================================ */
+function showOTForm(ot=null){
+  $('otFormWrap').innerHTML=`
+    <div class="form-card">
+      <h3 style="margin-bottom:16px">${ot?'تعديل عمل إضافي':'إضافة عمل إضافي'}</h3>
+      ${isSup()?`<div class="fg"><label>بحث</label><input id="of_q" placeholder="رقم الوظيفي أو الجوال" oninput="autoFill('of_q','of_n','of_eid','of_mob',null)"/></div>`:''}
+      <div class="frow">
+        <div class="fg"><label>الاسم</label><input id="of_n" value="${ot?.name||''}" readonly/></div>
+        <div class="fg"><label>الرقم الوظيفي</label><input id="of_eid" value="${ot?.empId||''}" readonly/></div>
+        <div class="fg"><label>الجوال</label><input id="of_mob" value="${ot?.mobile||''}" readonly dir="ltr"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>التاريخ *</label><input type="date" id="of_dt" value="${ot?.date||''}" onchange="fillDay()"/></div>
+        <div class="fg"><label>اليوم</label><input id="of_day" value="${ot?.day||''}" readonly style="background:var(--bg)"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>عدد الساعات *</label>
+          <input type="number" id="of_hrs" value="${ot?.hours||''}" step="0.25" min="0.25" max="24" placeholder="مثال: 2.5"/>
+          <small style="color:var(--text-l);font-size:.78rem">يقبل أقل من ساعة مثل 0.5</small>
+        </div>
+        <div class="fg"><label>ملاحظات</label><input id="of_note" value="${ot?.notes||''}"/></div>
+      </div>
+      <div id="of_msg"></div>
+      <div class="bgroup mt16">
+        <button class="btn btn-p" onclick="saveOT('${ot?.id||''}')">💾 حفظ</button>
+        <button class="btn btn-s" onclick="$('otFormWrap').classList.add('hidden')">إلغاء</button>
+      </div>
+    </div>`;
+  $('otFormWrap').classList.remove('hidden');
+  prefill('of_n','of_eid','of_mob',null);
+}
+function fillDay(){ const d=$('of_dt').value; if(d) $('of_day').value=arDay(d); }
+async function saveOT(id){
+  const n=$('of_n').value.trim(),eid=$('of_eid').value.trim(),
+        mob=$('of_mob').value.trim(),dt=$('of_dt').value,
+        day=$('of_day').value,hrs=parseFloat($('of_hrs').value),
+        note=$('of_note').value.trim();
+  if(!n||!eid||!dt||!hrs||hrs<=0){showErr('of_msg','الرجاء ملء الحقول المطلوبة');return;}
+  await dbSave(SHEETS.OT,{id:id||uid(),name:n,empId:eid,mobile:mob,date:dt,day,hours:hrs,notes:note});
+  $('otFormWrap').classList.add('hidden'); loadOTList(); toast('تم الحفظ');
+}
+async function loadOTList(){
+  let recs=await dbAll(SHEETS.OT);
+  if(!isSup()) recs=recs.filter(r=>r.empId===CU?.empId);
+  if(!recs.length){$('otList').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا يوجد عمل إضافي</div>';return;}
+  $('otList').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>التاريخ</th><th>اليوم</th><th>الساعات</th><th>ملاحظات</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr>
+      <td>${r.name}</td><td>${r.empId}</td>
+      <td>${fmtDate(r.date)}</td><td>${r.day||''}</td>
+      <td><span class="badge b-ok">${r.hours}س</span></td>
+      <td>${r.notes||'-'}</td>
+      <td><div class="bgroup">
+        ${canEdit(r.empId)?`<button class="btn btn-e btn-sm" onclick="editOT('${r.id}')">تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.OT}','${r.id}',loadOTList)">حذف</button>`:''}
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function editOT(id){ const r=(await dbAll(SHEETS.OT)).find(x=>x.id===id); if(r)showOTForm(r); }
+
+/* ============================================================
+   البطاقات
+   ============================================================ */
+function showCardForm(c=null){
+  const customTypes=JSON.parse(localStorage.getItem('customCardTypes')||'[]');
+  const allTypes=[...CARD_TYPES_DEFAULT,...customTypes];
+  $('cardFormWrap').innerHTML=`
+    <div class="form-card">
+      <h3 style="margin-bottom:16px">${c?'تعديل بطاقة':'إضافة بطاقة'}</h3>
+      ${isSup()?`<div class="fg"><label>بحث</label><input id="cdf_q" oninput="autoFill('cdf_q','cdf_n','cdf_eid','cdf_mob',null)" placeholder="رقم الوظيفي أو الجوال"/></div>`:''}
+      <div class="frow">
+        <div class="fg"><label>الاسم</label><input id="cdf_n" value="${c?.name||''}" readonly/></div>
+        <div class="fg"><label>الرقم الوظيفي</label><input id="cdf_eid" value="${c?.empId||''}" readonly/></div>
+        <div class="fg"><label>الجوال</label><input id="cdf_mob" value="${c?.mobile||''}" readonly dir="ltr"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>نوع البطاقة *</label>
+          <select id="cdf_type" onchange="onCardTypeChange()">
+            ${allTypes.map(t=>`<option ${c?.cardType===t?'selected':''}>${t}</option>`).join('')}
+            <option value="__new__">+ نوع جديد</option>
+          </select></div>
+        <div class="fg hidden" id="cdf_newWrap"><label>نوع جديد</label><input id="cdf_newType"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>تاريخ الانتهاء *</label><input type="date" id="cdf_exp" value="${c?.expiryDate||''}" onchange="calcRemaining()"/></div>
+        <div class="fg"><label>المدة المتبقية</label><input id="cdf_rem" readonly style="background:var(--bg)"/></div>
+      </div>
+      <div id="cdf_msg"></div>
+      <div class="bgroup mt16">
+        <button class="btn btn-p" onclick="saveCard('${c?.id||''}')">💾 حفظ</button>
+        <button class="btn btn-s" onclick="$('cardFormWrap').classList.add('hidden')">إلغاء</button>
+      </div>
+    </div>`;
+  $('cardFormWrap').classList.remove('hidden');
+  prefill('cdf_n','cdf_eid','cdf_mob',null);
+  if(c?.expiryDate) calcRemaining();
+}
+function onCardTypeChange(){ $('cdf_newWrap').classList.toggle('hidden',$('cdf_type').value!=='__new__'); }
+function calcRemaining(){
+  const exp=$('cdf_exp').value; if(!exp)return;
+  const d=daysDiff(new Date(),exp);
+  const el=$('cdf_rem');
+  if(d<0){el.value='منتهية';el.style.color='var(--err)';}
+  else if(d<=30){el.value=`${d} يوم`;el.style.color='var(--err)';}
+  else if(d<=60){el.value=`${d} يوم`;el.style.color='var(--warn)';}
+  else{el.value=`${d} يوم`;el.style.color='var(--ok)';}
+}
+async function saveCard(id){
+  let type=$('cdf_type').value;
+  if(type==='__new__'){
+    const nt=($('cdf_newType').value||'').trim();
+    if(!nt){showErr('cdf_msg','أدخل اسم البطاقة');return;}
+    type=nt;
+    const c=JSON.parse(localStorage.getItem('customCardTypes')||'[]');
+    if(!c.includes(nt)){c.push(nt);localStorage.setItem('customCardTypes',JSON.stringify(c));}
+  }
+  const n=$('cdf_n').value.trim(),eid=$('cdf_eid').value.trim(),
+        mob=$('cdf_mob').value.trim(),exp=$('cdf_exp').value;
+  if(!n||!eid||!exp){showErr('cdf_msg','الرجاء ملء الحقول المطلوبة');return;}
+  await dbSave(SHEETS.CARD,{id:id||uid(),name:n,empId:eid,mobile:mob,cardType:type,expiryDate:exp,remainingDays:daysDiff(new Date(),exp)});
+  $('cardFormWrap').classList.add('hidden'); loadCardList(); toast('تم الحفظ');
+}
+async function loadCardList(){
+  let recs=await dbAll(SHEETS.CARD);
+  if(!isSup()) recs=recs.filter(r=>r.empId===CU?.empId);
+  const now=new Date();
+  if(!recs.length){$('cardList').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا توجد بطاقات</div>';return;}
+  $('cardList').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>نوع البطاقة</th><th>تاريخ الانتهاء</th><th>المتبقي</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>{
+      const d=daysDiff(now,r.expiryDate);
+      const cls=d<0?'b-err':d<=30?'b-err':d<=60?'b-warn':'b-ok';
+      const lbl=d<0?'منتهية':d<=30?'عاجل':d<=60?'قريباً':'سارية';
+      const dcls=d<0?'exp-red':d<=60?'exp-warn':'exp-ok';
+      return`<tr>
+        <td>${r.name}</td><td>${r.empId}</td>
+        <td><strong>${r.cardType}</strong></td>
+        <td>${fmtDate(r.expiryDate)}</td>
+        <td class="${dcls}">${d<0?'منتهية':d+' يوم'}</td>
+        <td><span class="badge ${cls}">${lbl}</span></td>
+        <td><div class="bgroup">
+          ${canEdit(r.empId)?`<button class="btn btn-e btn-sm" onclick="editCard('${r.id}')">تعديل</button>
+          <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.CARD}','${r.id}',loadCardList)">حذف</button>`:''}
+        </div></td>
+      </tr>`;}).join('')}</tbody>
+  </table></div>`;
+}
+async function editCard(id){ const r=(await dbAll(SHEETS.CARD)).find(x=>x.id===id); if(r)showCardForm(r); }
+
+/* ============================================================
+   مقاسات الملابس
+   ============================================================ */
+function showClothForm(cl=null){
+  $('clothFormWrap').innerHTML=`
+    <div class="form-card">
+      <h3 style="margin-bottom:16px">${cl?'تعديل مقاسات':'إضافة مقاسات ملابس'}</h3>
+      ${isSup()?`<div class="fg"><label>بحث</label><input id="clf_q" oninput="autoFill('clf_q','clf_n','clf_eid','clf_mob',null)" placeholder="رقم الوظيفي أو الجوال"/></div>`:''}
+      <div class="frow">
+        <div class="fg"><label>الاسم</label><input id="clf_n" value="${cl?.name||''}" readonly/></div>
+        <div class="fg"><label>الرقم الوظيفي</label><input id="clf_eid" value="${cl?.empId||''}" readonly/></div>
+        <div class="fg"><label>الجوال</label><input id="clf_mob" value="${cl?.mobile||''}" readonly dir="ltr"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>قميص CAT2</label><select id="clf_sh">${SHIRT_SZ.map(s=>`<option ${cl?.shirt===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="fg"><label>بنطلون CAT2</label><select id="clf_tr">${TROUSER_SZ.map(s=>`<option ${cl?.trouser===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>سيفتي شوز</label><select id="clf_so">${SHOE_SZ.map(s=>`<option ${cl?.shoe===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="fg"><label>CAT24</label><select id="clf_c4">${SHIRT_SZ.map(s=>`<option ${cl?.cat24===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div id="clf_msg"></div>
+      <div class="bgroup mt16">
+        <button class="btn btn-p" onclick="saveCloth('${cl?.id||''}')">💾 حفظ</button>
+        <button class="btn btn-s" onclick="$('clothFormWrap').classList.add('hidden')">إلغاء</button>
+      </div>
+    </div>`;
+  $('clothFormWrap').classList.remove('hidden');
+  prefill('clf_n','clf_eid','clf_mob',null);
+}
+async function saveCloth(id){
+  const n=$('clf_n').value.trim(),eid=$('clf_eid').value.trim(),mob=$('clf_mob').value.trim();
+  if(!n||!eid){showErr('clf_msg','أدخل بيانات الموظف');return;}
+  await dbSave(SHEETS.CLOTH,{id:id||uid(),name:n,empId:eid,mobile:mob,
+    shirt:$('clf_sh').value,trouser:$('clf_tr').value,shoe:$('clf_so').value,cat24:$('clf_c4').value});
+  $('clothFormWrap').classList.add('hidden'); loadClothList(); toast('تم الحفظ');
+}
+async function loadClothList(){
+  let recs=await dbAll(SHEETS.CLOTH);
+  if(!isSup()) recs=recs.filter(r=>r.empId===CU?.empId);
+  if(!recs.length){$('clothList').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا توجد مقاسات</div>';return;}
+  $('clothList').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>قميص CAT2</th><th>بنطلون CAT2</th><th>سيفتي شوز</th><th>CAT24</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr>
+      <td>${r.name}</td><td>${r.empId}</td>
+      <td>${r.shirt||'-'}</td><td>${r.trouser||'-'}</td><td>${r.shoe||'-'}</td><td>${r.cat24||'-'}</td>
+      <td><div class="bgroup">
+        ${canEdit(r.empId)?`<button class="btn btn-e btn-sm" onclick="editCloth('${r.id}')">تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.CLOTH}','${r.id}',loadClothList)">حذف</button>`:''}
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function editCloth(id){ const r=(await dbAll(SHEETS.CLOTH)).find(x=>x.id===id); if(r)showClothForm(r); }
+
+/* ============================================================
+   المركز والسيارة
+   ============================================================ */
+function showVehForm(v=null){
+  $('vehFormWrap').innerHTML=`
+    <div class="form-card">
+      <h3 style="margin-bottom:16px">${v?'تعديل':'إضافة'} بيانات المركز والسيارة</h3>
+      ${isSup()?`<div class="fg"><label>بحث</label><input id="vhf_q" oninput="autoFill('vhf_q','vhf_n','vhf_eid','vhf_mob','vhf_sh')" placeholder="رقم الوظيفي أو الجوال"/></div>`:''}
+      <div class="frow">
+        <div class="fg"><label>الاسم</label><input id="vhf_n" value="${v?.name||''}" readonly/></div>
+        <div class="fg"><label>الرقم الوظيفي</label><input id="vhf_eid" value="${v?.empId||''}" readonly/></div>
+        <div class="fg"><label>الجوال</label><input id="vhf_mob" value="${v?.mobile||''}" readonly dir="ltr"/></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>الوردية *</label><select id="vhf_sh">
+          ${SHIFTS.map(s=>`<option ${(v?.shift||CU?.shift)===s?'selected':''}>${s}</option>`).join('')}
+        </select></div>
+        <div class="fg"><label>المنطقة</label><select id="vhf_reg">
+          ${['شمال','جنوب','شرق','غرب'].map(r=>`<option ${v?.region===r?'selected':''}>${r}</option>`).join('')}
+        </select></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>اسم المركز</label><input id="vhf_ctr" value="${v?.center||''}"/></div>
+        <div class="fg"><label>رقم السيارة</label><input id="vhf_car" value="${v?.car||''}"/></div>
+      </div>
+      <div id="vhf_msg"></div>
+      <div class="bgroup mt16">
+        <button class="btn btn-p" onclick="saveVeh('${v?.id||''}')">💾 حفظ</button>
+        <button class="btn btn-s" onclick="$('vehFormWrap').classList.add('hidden')">إلغاء</button>
+      </div>
+    </div>`;
+  $('vehFormWrap').classList.remove('hidden');
+  prefill('vhf_n','vhf_eid','vhf_mob','vhf_sh');
+}
+async function saveVeh(id){
+  const n=$('vhf_n').value.trim(),eid=$('vhf_eid').value.trim(),
+        mob=$('vhf_mob').value.trim(),sh=$('vhf_sh').value,
+        reg=$('vhf_reg').value,ctr=$('vhf_ctr').value.trim(),car=$('vhf_car').value.trim();
+  if(!n||!eid){showErr('vhf_msg','أدخل بيانات الموظف');return;}
+  await dbSave(SHEETS.VEH,{id:id||uid(),name:n,empId:eid,mobile:mob,shift:sh,region:reg,center:ctr,car});
+  $('vehFormWrap').classList.add('hidden'); loadVehList(); toast('تم الحفظ');
+}
+async function loadVehList(){
+  let recs=await dbAll(SHEETS.VEH);
+  if(!isSup()) recs=recs.filter(r=>r.empId===CU?.empId);
+  if(!recs.length){$('vehList').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا توجد بيانات</div>';return;}
+  $('vehList').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>الوردية</th><th>المنطقة</th><th>المركز</th><th>السيارة</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr>
+      <td>${r.name}</td><td>${r.empId}</td>
+      <td>${shiftBadge(r.shift)}</td><td>${r.region||'-'}</td>
+      <td>${r.center||'-'}</td><td>${r.car||'-'}</td>
+      <td><div class="bgroup">
+        ${canEdit(r.empId)?`<button class="btn btn-e btn-sm" onclick="editVeh('${r.id}')">تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.VEH}','${r.id}',loadVehList)">حذف</button>`:''}
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function editVeh(id){ const r=(await dbAll(SHEETS.VEH)).find(x=>x.id===id); if(r)showVehForm(r); }
+
+/* ============================================================
+   إدارة المشرفين
+   ============================================================ */
+function showSupForm(s=null){
+  openModal(s?'تعديل مشرف':'إضافة مشرف',`
+    <div class="fg"><label>الاسم *</label><input id="sf_n" value="${s?.name||''}"/></div>
+    <div class="frow">
+      <div class="fg"><label>الرقم الوظيفي *</label><input id="sf_id" value="${s?.empId||''}"/></div>
+      <div class="fg"><label>رقم الجوال (= كلمة المرور) *</label><input id="sf_m" value="${s?.mobile||''}" dir="ltr"/></div>
+    </div>
+    <div class="fg"><label>الوردية</label><select id="sf_sh">
+      ${SHIFTS.map(x=>`<option ${s?.shift===x?'selected':''}>${x}</option>`).join('')}
+    </select></div>
+    <div id="sf_msg"></div>
+    <div class="bgroup mt16">
+      <button class="btn btn-p" onclick="saveSup('${s?.id||''}')">حفظ</button>
+      <button class="btn btn-s" onclick="closeModal()">إلغاء</button>
+    </div>`);
+}
+async function saveSup(id){
+  const n=$('sf_n').value.trim(),eid=$('sf_id').value.trim(),
+        m=$('sf_m').value.trim(),sh=$('sf_sh').value;
+  if(!n||!eid||!m){showErr('sf_msg','ملء الحقول *');return;}
+  await dbSave(SHEETS.SUP,{id:id||uid(),name:n,empId:eid,mobile:m,shift:sh,role:'sup'});
+  closeModal(); loadSups(); toast('تم الحفظ');
+}
+async function loadSups(){
+  const recs=await dbAll(SHEETS.SUP);
+  if(!recs.length){$('supsOut').innerHTML='<div class="card tc" style="padding:30px;color:var(--text-l)">لا يوجد مشرفون</div>';return;}
+  $('supsOut').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الوظيفي</th><th>الجوال</th><th>الوردية</th><th>إجراءات</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr>
+      <td>${r.name}</td><td>${r.empId}</td><td dir="ltr">${r.mobile}</td>
+      <td>${shiftBadge(r.shift)}</td>
+      <td><div class="bgroup">
+        <button class="btn btn-e btn-sm" onclick='showSupForm(${JSON.stringify(r)})'>تعديل</button>
+        <button class="btn btn-d btn-sm" onclick="delRec('${SHEETS.SUP}','${r.id}',loadSups)">حذف</button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+/* ============================================================
+   ربط قاعدة البيانات (Apps Script)
+   ============================================================ */
+const APPS_SCRIPT = `// ===== الصق هذا في Google Apps Script =====
+// Deploy as Web App: Execute as Me, Anyone can access
+
+const SPREADSHEET_ID = '${SHEET_ID}';
+
+function doGet(e){
+  const p=e.parameter, ss=SpreadsheetApp.openById(SPREADSHEET_ID);
+  try{
+    let r;
+    if(p.action==='getAll')    r=getAll(ss,p.sheet);
+    else if(p.action==='save') r=save(ss,p.sheet,JSON.parse(p.row));
+    else if(p.action==='del')  r=del(ss,p.sheet,p.id);
+    else r={ok:0,error:'unknown'};
+    return out(r);
+  }catch(err){ return out({ok:0,error:err.message}); }
+}
+
+function out(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function sheet(ss,n){ return ss.getSheetByName(n)||ss.insertSheet(n); }
+
+function getAll(ss,name){
+  const s=sheet(ss,name), d=s.getDataRange().getValues();
+  if(d.length<2) return {ok:1,data:[]};
+  const h=d[0];
+  return {ok:1,data:d.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=r[i]);return o;}).filter(r=>r.id)};
+}
+
+function save(ss,name,row){
+  const s=sheet(ss,name);
+  let d=s.getDataRange().getValues();
+  if(!d.length){s.appendRow(Object.keys(row));s.appendRow(Object.values(row));return{ok:1};}
+  let h=d[0];
+  Object.keys(row).filter(k=>!h.includes(k)).forEach(k=>{h.push(k);s.getRange(1,h.length).setValue(k);});
+  const ii=h.indexOf('id');
+  for(let i=1;i<d.length;i++){
+    if(String(d[i][ii])===String(row.id)){
+      s.getRange(i+1,1,1,h.length).setValues([h.map(k=>row[k]??'')]);
+      return{ok:1};
+    }
+  }
+  s.appendRow(h.map(k=>row[k]??''));
+  return{ok:1};
+}
+
+function del(ss,name,id){
+  const s=sheet(ss,name);
+  const d=s.getDataRange().getValues();
+  if(d.length<2) return{ok:1};
+  const ii=d[0].indexOf('id');
+  for(let i=1;i<d.length;i++){
+    if(String(d[i][ii])===String(id)){s.deleteRow(i+1);return{ok:1};}
+  }
+  return{ok:0,error:'not found'};
+}`;
+
+function loadSetup(){
+  $('setupOut').innerHTML=`
+    <div class="card">
+      <h3 style="margin-bottom:14px">1. معرّف جدول البيانات (مُعبّأ تلقائياً)</h3>
+      <div class="fg"><label>Spreadsheet ID</label>
+        <input value="${SHEET_ID}" readonly style="background:var(--bg);direction:ltr;font-family:monospace"/>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">2. كود Google Apps Script</h3>
+      <p style="color:var(--text-l);font-size:.88rem;margin-bottom:10px">
+        افتح جدول البيانات ← Extensions ← Apps Script ← احذف الكود الموجود والصق هذا:
+      </p>
+      <div class="code-blk">${APPS_SCRIPT.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      <button class="btn btn-s mt12" onclick="navigator.clipboard.writeText(APPS_SCRIPT).then(()=>toast('تم نسخ الكود'))">📋 نسخ الكود</button>
+      <p style="margin-top:12px;font-size:.85rem;color:var(--text-l)">
+        بعد الحفظ: Deploy ← New deployment ← Web App ← Execute as: <strong>Me</strong> ← Who has access: <strong>Anyone</strong>
+      </p>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">3. رابط Web App</h3>
+      <div class="fg"><label>الصق رابط النشر هنا</label>
+        <input id="setup_url" value="${localStorage.getItem('scriptUrl')||''}" placeholder="https://script.google.com/macros/s/.../exec" dir="ltr"/>
+      </div>
+      <div class="bgroup mt12">
+        <button class="btn btn-p" onclick="saveSetup()">حفظ</button>
+        <button class="btn btn-s" onclick="testSetup()">اختبار الاتصال</button>
+      </div>
+      <div id="setup_msg"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">4. النشر على GitHub Pages</h3>
+      <div class="code-blk"># ارفع ملف index.html إلى GitHub Repository
+# Settings → Pages → Source: main branch
+# الرابط: https://USERNAME.github.io/REPO-NAME</div>
+    </div>`;
+}
+function saveSetup(){
+  const url=$('setup_url').value.trim();
+  if(!url){showErr('setup_msg','أدخل الرابط');return;}
+  localStorage.setItem('scriptUrl',url);
+  showOk('setup_msg','تم الحفظ');
+}
+async function testSetup(){
+  showInfo('setup_msg','جاري الاختبار...');
+  const r=await dbAll(SHEETS.EMP);
+  showOk('setup_msg',`✓ الاتصال يعمل — ${r.length} موظف في قاعدة البيانات`);
+}
+
+/* ============================================================
+   إعدادات عامة
+   ============================================================ */
+function loadCfg(){
+  const cVac=JSON.parse(localStorage.getItem('customVacTypes')||'[]');
+  const cCard=JSON.parse(localStorage.getItem('customCardTypes')||'[]');
+  $('cfgOut').innerHTML=`
+    <div class="card">
+      <h3 style="margin-bottom:14px">إعدادات الأرقام</h3>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="arabicNums" ${localStorage.getItem('arabicNums')==='1'?'checked':''}
+          onchange="localStorage.setItem('arabicNums',this.checked?'1':'0')"/>
+        استخدام الأرقام العربية ٠١٢٣٤٥٦٧٨٩
+      </label>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">أنواع الإجازات المخصصة</h3>
+      <div class="frow mb12">
+        <div class="fg"><input id="addVacType" placeholder="نوع إجازة جديد"/></div>
+        <button class="btn btn-p" onclick="addCustomVacType()">إضافة</button>
+      </div>
+      <div id="vacTypesList" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${cVac.map(t=>`<span style="background:var(--bg);padding:4px 12px;border-radius:20px;font-size:.85rem;display:flex;align-items:center;gap:6px">
+          ${t}<button onclick="removeVacType('${t}')" style="background:none;border:none;cursor:pointer;color:var(--err);font-size:1rem">✕</button>
+        </span>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">أنواع البطاقات المخصصة</h3>
+      <div class="frow mb12">
+        <div class="fg"><input id="addCardType" placeholder="نوع بطاقة جديد"/></div>
+        <button class="btn btn-p" onclick="addCustomCardType()">إضافة</button>
+      </div>
+      <div id="cardTypesList" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${cCard.map(t=>`<span style="background:var(--bg);padding:4px 12px;border-radius:20px;font-size:.85rem;display:flex;align-items:center;gap:6px">
+          ${t}<button onclick="removeCardType('${t}')" style="background:none;border:none;cursor:pointer;color:var(--err);font-size:1rem">✕</button>
+        </span>`).join('')}
+      </div>
+    </div>`;
+}
+function addCustomVacType(){
+  const v=($('addVacType').value||'').trim();if(!v)return;
+  const arr=JSON.parse(localStorage.getItem('customVacTypes')||'[]');
+  if(!arr.includes(v)&&!VAC_TYPES_DEFAULT.includes(v)){arr.push(v);localStorage.setItem('customVacTypes',JSON.stringify(arr));}
+  $('addVacType').value=''; loadCfg();
+}
+function removeVacType(t){
+  const arr=JSON.parse(localStorage.getItem('customVacTypes')||'[]').filter(x=>x!==t);
+  localStorage.setItem('customVacTypes',JSON.stringify(arr)); loadCfg();
+}
+function addCustomCardType(){
+  const v=($('addCardType').value||'').trim();if(!v)return;
+  const arr=JSON.parse(localStorage.getItem('customCardTypes')||'[]');
+  if(!arr.includes(v)&&!CARD_TYPES_DEFAULT.includes(v)){arr.push(v);localStorage.setItem('customCardTypes',JSON.stringify(arr));}
+  $('addCardType').value=''; loadCfg();
+}
+function removeCardType(t){
+  const arr=JSON.parse(localStorage.getItem('customCardTypes')||'[]').filter(x=>x!==t);
+  localStorage.setItem('customCardTypes',JSON.stringify(arr)); loadCfg();
+}
+
+/* ============================================================
+   حذف عام
+   ============================================================ */
+async function delRec(sheet,id,cb){
+  if(!confirm('هل أنت متأكد من الحذف؟'))return;
+  await dbDel(sheet,id);
+  if(typeof cb==='function') cb();
+  else if(typeof cb==='string'&&typeof window[cb]==='function') window[cb]();
+  toast('تم الحذف');
+}
+
+/* ============================================================
+   تهيئة عند الدخول
+   ============================================================ */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!$('loginScreen').classList.contains('hidden')) doLogin();
+});
+</script>
+</body>
+</html>
