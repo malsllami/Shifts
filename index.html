@@ -310,7 +310,13 @@ tr.new-t{animation:rowhl 4s ease forwards}
     <h1>نظام الورديات</h1>
     <p>إدارة متكاملة للموارد البشرية</p>
     <div class="lf"><label>🔢 الرقم الوظيفي</label><input id="li_id" autocomplete="username" placeholder="أدخل رقمك الوظيفي"/></div>
-    <div class="lf"><label>🔑 كلمة المرور</label><input id="li_pw" type="password" autocomplete="current-password" placeholder="أدخل رقم جوالك"/></div>
+    <div class="lf">
+      <label>🔑 كلمة المرور</label>
+      <div style="position:relative">
+        <input id="li_pw" type="password" autocomplete="current-password" placeholder="أدخل رقم جوالك" style="padding-left:40px"/>
+        <button type="button" id="pwEye" onclick="togglePw()" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,.6);font-size:1rem;padding:4px" id="pwToggle">👁️</button>
+      </div>
+    </div>
     <button class="login-btn" id="loginBtn" onclick="doLogin()">🚀 دخول</button>
     <div id="li_progress" style="margin-top:12px;display:none">
       <div style="background:rgba(255,255,255,.15);border-radius:20px;height:6px;overflow:hidden">
@@ -660,91 +666,119 @@ let CU=null, EMP_MODE=false, _editEmpId='', _editAnnQ=30, _editSchQ=60, _editSup
 // بيانات المدير الافتراضية (تُقرأ من الإعدادات)
 const DEF_ADMIN={empId:'63656',mobile:'0555889581',name:'المدير',shift:'أ'};
 
+function togglePw(){
+  const inp=document.getElementById('li_pw');
+  const btn=document.getElementById('pwEye');
+  if(!inp||!btn)return;
+  const show=inp.type==='password';
+  inp.type=show?'text':'password';
+  btn.textContent=show?'🙈':'👁';
+  btn.style.color=show?'rgba(255,255,255,.8)':'rgba(255,255,255,.5)';
+}
+
 async function doLogin(){
   const id=$v('li_id').trim(), pw=$v('li_pw').trim();
   $('li_err').textContent='';
   if(!id||!pw){$('li_err').textContent='⚠️ أدخل الرقم الوظيفي وكلمة المرور';return;}
 
-  // إظهار شريط التقدم
   const prog=$('li_progress'),bar=$('li_bar'),stat=$('li_status'),btn=$('loginBtn');
-  if(prog){prog.style.display='block';btn.disabled=true;btn.style.opacity='.6';}
-  function setBar(pct,msg){if(bar)bar.style.width=pct+'%';if(stat)stat.textContent=msg;}
+  if(prog){prog.style.display='block';}
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+  function setBar(pct,msg,ok=true){
+    if(bar){bar.style.width=pct+'%';bar.style.background=ok?'linear-gradient(90deg,#22c55e,#4ade80)':'linear-gradient(90deg,#ef4444,#f97316)';}
+    if(stat)stat.textContent=msg;
+  }
+  function resetBtn(){if(btn){btn.disabled=false;btn.style.opacity='1';}}
 
   try{
-    setBar(20,'جاري التحقق...');
+    setBar(15,'جاري التحقق...');
 
-    // ── قراءة إعدادات المدير من localStorage أولاً (سريع) ──
+    // ── 1. قراءة إعدادات المدير ──
     const cfg=lsGetAll('اعدادات').find(r=>r.key==='admin_cfg')||{};
     const adminId   = cfg.adminId    || DEF_ADMIN.empId;
     const adminPin  = cfg.adminPin   || cfg.adminMobile || DEF_ADMIN.mobile;
     const adminName = cfg.adminName  || DEF_ADMIN.name;
     const adminShift= cfg.adminShift || DEF_ADMIN.shift;
 
-    // ── تحقق مدير أولاً (لا يحتاج شبكة) ──
+    // ── 2. تحقق مدير ──
     if(id===adminId && pw===adminPin){
-      setBar(70,'جاري تحميل البيانات...');
+      setBar(80,'✅ مرحباً المدير');
       const emps=lsGetAll('موظفون');
       const me=emps.find(e=>e.empId===adminId)||{};
       CU={name:adminName,empId:adminId,mobile:adminPin,shift:adminShift,...me,role:'admin'};
-      setBar(100,'✅ تم التحقق!');
-      setTimeout(()=>launchApp(),400);
+      setBar(100,'✅ تم تسجيل الدخول');
+      setTimeout(()=>launchApp(),350);
       return;
     }
 
-    setBar(40,'جاري التحقق من المشرفين...');
-    // ── تحقق مشرفين من localStorage أولاً ──
-    const supsLocal=lsGetAll('مشرفون');
-    const sup=supsLocal.find(s=>s.empId===id&&s.mobile===pw);
+    setBar(35,'جاري التحقق من المشرفين...');
+
+    // ── 3. تحقق مشرفين (localStorage) ──
+    const supsLS=lsGetAll('مشرفون');
+    const sup=supsLS.find(s=>String(s.empId)===String(id)&&String(s.mobile)===String(pw));
     if(sup){
-      // دمج بيانات الموظف مع بيانات المشرف
-      const empLocal=lsGetAll('موظفون').find(e=>e.empId===id)||{};
-      CU={...empLocal,...sup,role:'sup'};
+      const empLS=lsGetAll('موظفون').find(e=>String(e.empId)===String(id))||{};
+      CU={...empLS,...sup,role:'sup'};
       setBar(100,'✅ مرحباً '+sup.name);
-      setTimeout(()=>launchApp(),400);return;
+      setTimeout(()=>launchApp(),350);
+      return;
     }
 
-    setBar(60,'جاري التحقق من الموظفين...');
-    // ── تحقق موظفين من localStorage ──
-    const empsLocal=lsGetAll('موظفون');
-    const emp=empsLocal.find(e=>e.empId===id&&e.mobile===pw);
+    setBar(55,'جاري التحقق من الموظفين...');
+
+    // ── 4. تحقق موظفين (localStorage) ──
+    const empsLS=lsGetAll('موظفون');
+    const emp=empsLS.find(e=>String(e.empId)===String(id)&&String(e.mobile)===String(pw));
     if(emp){
       CU={...emp,role:'emp'};
       setBar(100,'✅ مرحباً '+emp.name);
-      setTimeout(()=>launchApp(),400);return;
+      setTimeout(()=>launchApp(),350);
+      return;
     }
 
-    // ── إذا فارغ — جرب الشبكة ──
-    if(supsLocal.length===0&&empsLocal.length===0){
-      setBar(70,'جاري الاتصال بقاعدة البيانات...');
-      if(id==='admin'&&pw==='admin123'){
-        CU={...DEF_ADMIN,role:'admin'};
-        setBar(100,'✅ دخول المدير');setTimeout(()=>launchApp(),400);return;
+    setBar(70,'جاري الاتصال بقاعدة البيانات...');
+
+    // ── 5. جرب من الشبكة إذا توفرت ──
+    const url=localStorage.getItem('scriptUrl')||'';
+    if(url){
+      const [supsNet,empsNet]=await Promise.all([dbAll('مشرفون'),dbAll('موظفون')]);
+      const supNet=supsNet.find(s=>String(s.empId)===String(id)&&String(s.mobile)===String(pw));
+      if(supNet){
+        const empNet=empsNet.find(e=>String(e.empId)===String(id))||{};
+        CU={...empNet,...supNet,role:'sup'};
+        setBar(100,'✅ مرحباً '+supNet.name);
+        setTimeout(()=>launchApp(),350);return;
       }
-      const sups=await dbAll('مشرفون');
-      const sup2=sups.find(s=>s.empId===id&&s.mobile===pw);
-      if(sup2){
-        const empData2=emps.find(e=>e.empId===id)||{};
-        CU={...empData2,...sup2,role:'sup'};
-        setBar(100,'✅ مرحباً '+sup2.name);setTimeout(()=>launchApp(),400);return;
+      const empNet=empsNet.find(e=>String(e.empId)===String(id)&&String(e.mobile)===String(pw));
+      if(empNet){
+        CU={...empNet,role:'emp'};
+        setBar(100,'✅ مرحباً '+empNet.name);
+        setTimeout(()=>launchApp(),350);return;
       }
-      const emps=await dbAll('موظفون');
-      const emp2=emps.find(e=>e.empId===id&&e.mobile===pw);
-      if(emp2){CU={...emp2,role:'emp'};setBar(100,'✅ مرحباً '+emp2.name);setTimeout(()=>launchApp(),400);return;}
     }
 
-    // ── فشل الدخول ──
-    setBar(100,'❌ بيانات غير صحيحة');
-    if(bar) bar.style.background='linear-gradient(90deg,#ef4444,#f97316)';
+    // ── 6. دخول افتراضي (قاعدة فارغة) ──
+    if(supsLS.length===0&&empsLS.length===0&&id==='admin'&&pw==='admin123'){
+      CU={...DEF_ADMIN,role:'admin'};
+      setBar(100,'✅ دخول المدير الافتراضي');
+      setTimeout(()=>launchApp(),350);
+      return;
+    }
+
+    // ── 7. فشل الدخول ──
+    setBar(100,'❌ بيانات الدخول غير صحيحة',false);
     setTimeout(()=>{
       if(prog)prog.style.display='none';
       if(bar){bar.style.width='0%';bar.style.background='linear-gradient(90deg,#22c55e,#4ade80)';}
-      if(btn){btn.disabled=false;btn.style.opacity='1';}
+      resetBtn();
     },1500);
     $('li_err').textContent='⚠️ بيانات الدخول غير صحيحة';
-  }catch(e){
-    setBar(100,'❌ خطأ في الاتصال');
-    if(btn){btn.disabled=false;btn.style.opacity='1';}
-    $('li_err').textContent='⚠️ '+e.message;
+
+  }catch(err){
+    console.error('Login error:',err);
+    setBar(100,'❌ خطأ: '+err.message,false);
+    resetBtn();
+    $('li_err').textContent='⚠️ خطأ: '+err.message;
   }
 }
 
@@ -2756,6 +2790,19 @@ async function exportShiftCSV(){
   toast('✅ تم تصدير وردية '+shift+' — '+shiftEmps.length+' موظف');
 }
 /* ══ اختصارات ══ */
+function togglePw(){
+  const inp=$('li_pw');
+  const btn=$('pwToggle');
+  if(!inp)return;
+  if(inp.type==='password'){
+    inp.type='text';
+    if(btn) btn.textContent='🙈';
+  } else {
+    inp.type='password';
+    if(btn) btn.textContent='👁️';
+  }
+}
+
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!$('loginScreen').classList.contains('hidden')) doLogin();
   if(e.key==='Escape') closeModal();
