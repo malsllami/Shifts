@@ -318,6 +318,7 @@ tr.new-t{animation:rowhl 4s ease forwards}
       </div>
     </div>
     <button class="login-btn" id="loginBtn" onclick="doLogin()">🚀 دخول</button>
+    <button type="button" onclick="showDebug()" style="background:none;border:none;color:rgba(255,255,255,.3);font-size:.72rem;cursor:pointer;margin-top:8px;font-family:Tajawal;width:100%">🔧 تشخيص البيانات المحفوظة</button>
     <div id="li_progress" style="margin-top:12px;display:none">
       <div style="background:rgba(255,255,255,.15);border-radius:20px;height:6px;overflow:hidden">
         <div id="li_bar" style="height:100%;border-radius:20px;background:linear-gradient(90deg,#22c55e,#4ade80);width:0%;transition:width .4s ease"></div>
@@ -666,6 +667,26 @@ let CU=null, EMP_MODE=false, _editEmpId='', _editAnnQ=30, _editSchQ=60, _editSup
 // بيانات المدير الافتراضية (تُقرأ من الإعدادات)
 const DEF_ADMIN={empId:'63656',mobile:'0555889581',name:'المدير',shift:'أ'};
 
+function showDebug(){
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('hr_'));
+  let info='البيانات المحفوظة في المتصفح:\n\n';
+  if(!keys.length){ info+='لا توجد بيانات محفوظة'; }
+  else {
+    keys.forEach(k=>{
+      try{
+        const d=JSON.parse(localStorage.getItem(k)||'[]');
+        const sheet=k.replace('hr_','');
+        info+=`جدول "${sheet}": ${d.length} سجل\n`;
+        if(d.length&&d.length<=5){
+          d.forEach(r=>{ info+=`  - ${r.name||r.key||r.empId||'—'} | ${r.empId||'—'} | ${r.mobile||'—'} | ${r.role||'—'}\n`; });
+        }
+        info+='\n';
+      }catch(e){ info+=k+': خطأ\n'; }
+    });
+  }
+  alert(info);
+}
+
 function togglePw(){
   const inp=document.getElementById('li_pw');
   const btn=document.getElementById('pwEye');
@@ -715,6 +736,8 @@ async function doLogin(){
 
     // ── 3. تحقق مشرفين (localStorage) ──
     const supsLS=lsGetAll('مشرفون');
+    console.log('مشرفون في localStorage:',supsLS.length,'أول واحد:',supsLS[0]);
+    console.log('يبحث عن empId:',id,'mobile:',pw);
     const sup=supsLS.find(s=>String(s.empId)===String(id)&&String(s.mobile)===String(pw));
     if(sup){
       const empLS=lsGetAll('موظفون').find(e=>String(e.empId)===String(id))||{};
@@ -728,6 +751,7 @@ async function doLogin(){
 
     // ── 4. تحقق موظفين (localStorage) ──
     const empsLS=lsGetAll('موظفون');
+    console.log('موظفون في localStorage:',empsLS.length,'أول واحد:',empsLS[0]);
     const emp=empsLS.find(e=>String(e.empId)===String(id)&&String(e.mobile)===String(pw));
     if(emp){
       CU={...emp,role:'emp'};
@@ -736,25 +760,59 @@ async function doLogin(){
       return;
     }
 
+    // ── 5. بحث موسّع في localStorage (كل المفاتيح الممكنة) ──
+    // أحياناً البيانات محفوظة بعد عملية sync
+    const allLSKeys=Object.keys(localStorage).filter(k=>k.startsWith('hr_'));
+    for(const key of allLSKeys){
+      try{
+        const rows=JSON.parse(localStorage.getItem(key)||'[]');
+        if(!Array.isArray(rows)) continue;
+        // بحث في أي جدول محفوظ
+        const found=rows.find(r=>String(r.empId)===String(id)&&String(r.mobile)===String(pw));
+        if(found){
+          const role=found.role==='sup'?'sup':(key.includes('مشرف')?'sup':'emp');
+          if(role==='sup'){
+            const empAlt=lsGetAll('موظفون').find(e=>String(e.empId)===String(id))||{};
+            CU={...empAlt,...found,role:'sup'};
+          } else {
+            CU={...found,role:'emp'};
+          }
+          setBar(100,'✅ مرحباً '+found.name);
+          setTimeout(()=>launchApp(),350);
+          return;
+        }
+      }catch(e){}
+    }
+
     setBar(70,'جاري الاتصال بقاعدة البيانات...');
 
-    // ── 5. جرب من الشبكة إذا توفرت ──
+    // ── 6. جرب من الشبكة فقط إذا فشل localStorage تماماً ──
     const url=localStorage.getItem('scriptUrl')||'';
     if(url){
-      const [supsNet,empsNet]=await Promise.all([dbAll('مشرفون'),dbAll('موظفون')]);
-      const supNet=supsNet.find(s=>String(s.empId)===String(id)&&String(s.mobile)===String(pw));
-      if(supNet){
-        const empNet=empsNet.find(e=>String(e.empId)===String(id))||{};
-        CU={...empNet,...supNet,role:'sup'};
-        setBar(100,'✅ مرحباً '+supNet.name);
-        setTimeout(()=>launchApp(),350);return;
-      }
-      const empNet=empsNet.find(e=>String(e.empId)===String(id)&&String(e.mobile)===String(pw));
-      if(empNet){
-        CU={...empNet,role:'emp'};
-        setBar(100,'✅ مرحباً '+empNet.name);
-        setTimeout(()=>launchApp(),350);return;
-      }
+      try{
+        const [supsNet,empsNet]=await Promise.all([
+          scriptCall('getAll',{sheet:'مشرفون'}),
+          scriptCall('getAll',{sheet:'موظفون'})
+        ]);
+        const sups2=(supsNet&&supsNet.ok)?supsNet.data:[];
+        const emps2=(empsNet&&empsNet.ok)?empsNet.data:[];
+        // حفظ في localStorage للمرة القادمة
+        if(sups2.length) localStorage.setItem('hr_مشرفون',JSON.stringify(sups2));
+        if(emps2.length) localStorage.setItem('hr_موظفون',JSON.stringify(emps2));
+        const supNet=sups2.find(s=>String(s.empId)===String(id)&&String(s.mobile)===String(pw));
+        if(supNet){
+          const empNet=emps2.find(e=>String(e.empId)===String(id))||{};
+          CU={...empNet,...supNet,role:'sup'};
+          setBar(100,'✅ مرحباً '+supNet.name);
+          setTimeout(()=>launchApp(),350);return;
+        }
+        const empNet=emps2.find(e=>String(e.empId)===String(id)&&String(e.mobile)===String(pw));
+        if(empNet){
+          CU={...empNet,role:'emp'};
+          setBar(100,'✅ مرحباً '+empNet.name);
+          setTimeout(()=>launchApp(),350);return;
+        }
+      }catch(netErr){console.warn('Network login failed:',netErr);}
     }
 
     // ── 6. دخول افتراضي (قاعدة فارغة) ──
@@ -2790,6 +2848,26 @@ async function exportShiftCSV(){
   toast('✅ تم تصدير وردية '+shift+' — '+shiftEmps.length+' موظف');
 }
 /* ══ اختصارات ══ */
+function showDebug(){
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('hr_'));
+  let info='البيانات المحفوظة في المتصفح:\n\n';
+  if(!keys.length){ info+='لا توجد بيانات محفوظة'; }
+  else {
+    keys.forEach(k=>{
+      try{
+        const d=JSON.parse(localStorage.getItem(k)||'[]');
+        const sheet=k.replace('hr_','');
+        info+=`جدول "${sheet}": ${d.length} سجل\n`;
+        if(d.length&&d.length<=5){
+          d.forEach(r=>{ info+=`  - ${r.name||r.key||r.empId||'—'} | ${r.empId||'—'} | ${r.mobile||'—'} | ${r.role||'—'}\n`; });
+        }
+        info+='\n';
+      }catch(e){ info+=k+': خطأ\n'; }
+    });
+  }
+  alert(info);
+}
+
 function togglePw(){
   const inp=$('li_pw');
   const btn=$('pwToggle');
